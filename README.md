@@ -93,7 +93,7 @@ but it is insurance, not an emergency.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/<you>/omarchy-oled-guard.git --enable
+omarchy plugin add https://github.com/rawritude/omarchy-oled-guard.git --enable
 ```
 
 Then restart the shell so the plugin's JS library loads:
