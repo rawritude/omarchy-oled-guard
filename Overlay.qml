@@ -1,6 +1,8 @@
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Wayland
+import "GuardModel.js" as GuardModel
 
 // One attenuation surface per screen, pinned over the bar strip.
 //
@@ -16,6 +18,8 @@ PanelWindow {
     property int thickness: 26
     property real attenuation: 0
     property bool checkerboard: false
+    property bool suspendOnFullscreen: true
+    property int hyprRevision: 0
     property int phaseX: 0
     property int phaseY: 0
     property int fadeMs: 1500
@@ -24,9 +28,31 @@ PanelWindow {
 
     screen: modelData
 
+    // Fullscreen is resolved here, against THIS overlay's monitor, rather than
+    // once globally off the focused workspace. Focus and fullscreen live on
+    // different screens all the time: a film playing on one monitor while the
+    // other holds focus would otherwise keep this veil sitting on top of the
+    // film -- and it sits on the overlay layer, so it would be visible.
+    readonly property bool screenFullscreen: {
+        hyprRevision // re-evaluate when the service says the payload moved
+        if (!suspendOnFullscreen)
+            return false
+        try {
+            var monitor = Hyprland.monitorFor(overlay.screen)
+            var ws = monitor ? monitor.activeWorkspace : null
+            var raw = ws ? ws.lastIpcObject : null
+            return raw ? !!(raw.hasfullscreen || raw.hasFullscreen) : false
+        } catch (e) {
+            return false
+        }
+    }
+
+    readonly property real effectiveAttenuation: screenFullscreen ? 0 : attenuation
+    readonly property real veilOpacity: GuardModel.veilOpacity(effectiveAttenuation, checkerboard)
+
     // Stay mapped until the fade has actually finished, otherwise dropping the
     // surface would cut the transition off at whatever alpha it had reached.
-    visible: attenuation > 0 || veil.opacity > 0.001
+    visible: veilOpacity > 0 || veil.opacity > 0.001
 
     color: "transparent"
 
@@ -54,10 +80,9 @@ PanelWindow {
         anchors.fill: parent
         clip: true
 
-        // Flat dim and checkerboard are the same average attenuation spent two
-        // ways. The checker doubles the alpha but applies it to half the
-        // pixels, trading contrast for deeper rest on the pixels it covers.
-        opacity: overlay.checkerboard ? Math.min(1, overlay.attenuation * 2) : overlay.attenuation
+        // Computed in GuardModel so the painted alpha and the banked figure are
+        // derived from one place and cannot drift apart.
+        opacity: overlay.veilOpacity
 
         Behavior on opacity {
             NumberAnimation {

@@ -22,9 +22,15 @@ var DEFAULTS = {
 
     fadeMs: 1500,
 
-    // Hard mode: instead of a flat dim, tile a checkerboard so half the
-    // subpixels in the strip are fully off, and rotate its phase so the
-    // pattern itself cannot etch in. Costs contrast; wins more wear.
+    // Hard mode: instead of a flat dim, tile a checkerboard so half the strip
+    // is covered at double alpha, rotating the phase so the pattern itself
+    // cannot etch in.
+    //
+    // It does NOT save more wear than flat dim. At equal average it is level
+    // under a linear model, and slightly worse under realistic superlinear
+    // aging: rotation leaves each pixel at full drive half the time, and for a
+    // convex wear curve the average of the extremes exceeds the middle. It is
+    // offered for people who want the deep-rest behaviour, not as an upgrade.
     checkerboard: false,
     checkerPhaseMinutes: 5,
 
@@ -120,16 +126,43 @@ function isVerticalEdge(edge) {
 }
 
 // The single decision the overlay renders. Kept as one function so the
-// precedence between "paused", "bar is hidden", "something is fullscreen" and
-// "user went idle" is stated once rather than smeared across bindings.
+// precedence between "paused", "bar is hidden", "the panel is not even lit"
+// and "user went idle" is stated once rather than smeared across bindings.
+//
+// Fullscreen is deliberately NOT handled here: it is a per-monitor fact, and
+// resolving it globally would veil a film on one screen because a different
+// screen happens to hold focus. Each overlay decides that for its own screen.
 function attenuationFor(state) {
     if (!state.enabled || state.paused)
         return 0
     if (state.barHidden)
         return 0
-    if (state.suspendOnFullscreen && state.fullscreen)
+    // A locked session covers the bar, and a slept panel emits nothing. Veiling
+    // either is pointless, and -- the reason this matters -- banking "wear
+    // avoided" for pixels that were dark or unpowered would make the headline
+    // number drift toward idleOpacity no matter what the guard actually did.
+    if (!state.lit)
         return 0
     return state.idle ? state.idleOpacity : state.baseOpacity
+}
+
+// What the overlay paints. Checkerboard covers half the strip, so it doubles
+// alpha to hit the same average as a flat dim of the same depth.
+function veilOpacity(attenuation, checkerboard) {
+    var a = clamp(asNumber(attenuation, 0), 0, 1)
+    return checkerboard ? clamp(a * 2, 0, 1) : a
+}
+
+// What the panel actually receives on average -- the only figure fit to report
+// or to bank.
+//
+// These diverge in checkerboard mode above 0.5: alpha saturates at 1.0, so the
+// delivered average caps at 0.5 however deep the config asked for. Booking the
+// requested value there would overstate the saving by up to 1.9x, in the mode
+// most likely to be chosen by someone who cares about the number.
+function effectiveAttenuation(attenuation, checkerboard) {
+    var painted = veilOpacity(attenuation, checkerboard)
+    return checkerboard ? painted / 2 : painted
 }
 
 // Checkerboard phase walks the four alignments of a 2x2 tile, so over a full
@@ -145,9 +178,9 @@ function phaseOffset(phase) {
 function emptyStats() {
     return {
         version: 1,
-        panelSeconds: 0, // shell uptime with at least one screen awake
-        guardedSeconds: 0, // time the guard was actually attenuating
-        savedSeconds: 0 // attenuation-weighted wear avoided on the strip
+        panelSeconds: 0, // time the panel was lit: awake, unlocked, shell up
+        guardedSeconds: 0, // of that, time the guard was actually attenuating
+        savedSeconds: 0 // attenuation-weighted lit time avoided on the strip
     }
 }
 
@@ -161,11 +194,21 @@ function normalizeStats(raw) {
     return base
 }
 
-// One tick of wear accounting. `attenuation` is the alpha currently over the
-// strip, so attenuation * seconds is the emitted-light-seconds it avoided --
-// the honest unit here, since OLED wear tracks luminance integrated over time.
-function accumulate(stats, deltaSeconds, attenuation) {
+// One tick of wear accounting.
+//
+// `attenuation` must be the *delivered* average (see effectiveAttenuation), and
+// `lit` must be false whenever the panel was not actually emitting -- asleep,
+// or covered by the lock surface. A tick that is not lit advances nothing at
+// all, so an overnight idle cannot inflate the totals.
+//
+// attenuation * seconds is a deliberately conservative estimate of the
+// emitted-light-seconds avoided: alpha composites in gamma space, so black at
+// alpha 0.4 cuts linear luminance by rather more than 40%. Under-claiming is
+// the right direction for a number the README asks anyone to trust.
+function accumulate(stats, deltaSeconds, attenuation, lit) {
     var next = normalizeStats(stats)
+    if (!lit)
+        return next
     var delta = Math.max(0, asNumber(deltaSeconds, 0))
     var alpha = clamp(asNumber(attenuation, 0), 0, 1)
     next.panelSeconds += delta

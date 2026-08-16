@@ -26,7 +26,9 @@ Holds a translucent veil over the bar strip, and only the bar strip.
 - **Idle attenuation** (`idleOpacity`) — deepens once there has been no input
   for `idleAfterSeconds`, and lifts the instant you touch anything.
 - **Fullscreen suspend** — the veil lifts entirely when there is fullscreen
-  content underneath. Dimming a film is a bug, not a feature.
+  content underneath. Dimming a film is a bug, not a feature. Decided per
+  monitor, so a film on one screen is not veiled because another screen
+  happens to hold focus.
 - **Wear accounting** — tracks how much lit time it has actually reclaimed, so
   the plugin can be judged on numbers instead of vibes.
 
@@ -38,11 +40,31 @@ and the veil stops drawing, because there is nothing left to protect.
 
 **Flat dim** (default) applies uniform alpha across the strip.
 
-**Checkerboard** (`"checkerboard": true`) tiles a 2×2 pattern so half the
-pixels take double the attenuation and the other half take none, rotating the
-phase every `checkerPhaseMinutes` so the pattern itself cannot etch in. Same
-average wear reduction, spent differently: deeper rest for the covered pixels,
-at the cost of visible texture on the bar.
+**Checkerboard** (`"checkerboard": true`) tiles a 2×2 pattern so half the strip
+is covered at double alpha and the other half not at all, rotating the phase
+every `checkerPhaseMinutes` so the pattern itself cannot etch in.
+
+**It does not save more wear than flat dim.** At equal average the two are
+level under a linear model, and checkerboard is slightly *worse* under
+realistic OLED aging, which is superlinear in drive level: phase rotation
+leaves every pixel at full drive half the time, and for a convex wear curve the
+average of the two extremes exceeds the middle. It is offered for people who
+want the deep-rest behaviour, not as an upgrade — which is the other reason
+flat dim is the default.
+
+Two further limits:
+
+- **It cannot exceed 50% average attenuation.** The mode doubles alpha over
+  half the pixels, and alpha saturates at 1.0, so anything above `0.5` caps
+  out. The plugin reports this honestly rather than quietly booking the number
+  you asked for — `status` returns both `requestedAttenuation` and the
+  `attenuation` actually delivered, and only the delivered figure is banked.
+- **The cell size follows your display scale.** The tile is 2×2 *logical*
+  pixels, so at scale 2 each cell covers a 2×2 block of physical pixels rather
+  than one. Coverage is still 50% and rotation still swaps the covered set
+  completely, so the arithmetic holds, but the texture is coarser than a true
+  one-pixel checker. At fractional scales (1.25, 1.5) nearest-neighbour
+  scaling makes cells uneven and the equal-time property degrades.
 
 Flat dim is the better default precisely *because* alpha compositing is
 available here. The existing Hyprland tool in this space,
@@ -115,7 +137,7 @@ so nothing about your bar changes while you are looking at it. Raise it to
 `0.15`–`0.25` for a standing reduction that is easy to stop noticing.
 
 Config changes hot-reload. Editing the plugin's `.js` requires
-`omarchy restart shell`.
+`omarchy restart shell` (plugin code is cached, `.qml` and `.js` alike).
 
 ## Bar indicator
 
@@ -144,15 +166,26 @@ Stats live in `~/.local/state/omarchy/oled-guard.json`:
 
 | field | meaning |
 |---|---|
-| `panelSeconds` | shell uptime observed |
-| `guardedSeconds` | time the veil was actually attenuating |
+| `panelSeconds` | time the panel was actually lit: awake, unlocked, shell up |
+| `guardedSeconds` | of that, time the veil was actually attenuating |
 | `savedSeconds` | attenuation-weighted lit time avoided on the strip |
 
-`savedSeconds` is the honest figure: attenuation × duration, integrated. At
-`baseOpacity: 0.4` held for a minute it records 24 seconds, because that is the
-emitted-light-seconds the strip did not spend. Written every five minutes
-rather than every minute, so a session that ends abruptly can lose up to five
-minutes of accounting.
+`savedSeconds` integrates delivered attenuation × duration. At `baseOpacity:
+0.4` held for a minute it records 24 seconds.
+
+What it deliberately refuses to count:
+
+- **Time the panel was not emitting.** A locked session or a slept display
+  advances nothing at all. Counting those would let an overnight idle inflate
+  the totals toward `idleOpacity` regardless of what the guard did.
+- **Attenuation it did not actually deliver.** In checkerboard mode above
+  `0.5`, the delivered average is banked, not the configured one.
+
+Two known limits: the estimate is **conservative** — alpha composites in gamma
+space, so black at alpha 0.4 cuts linear luminance by rather more than 40%, and
+under-claiming is the right direction here. And accounting is sampled once a
+minute at the attenuation prevailing at the tick, so brief transitions are
+approximated. Stats are written every five minutes and on shutdown.
 
 ## Requirements
 

@@ -37,8 +37,27 @@ Item {
     property bool paused: false
 
     property bool idle: false
-    property bool fullscreen: false
     property int phase: 0
+
+    // Bumped whenever something happened that could change a per-screen
+    // fullscreen verdict. Overlays reference it so their own bindings
+    // re-evaluate: `lastIpcObject` is refreshed in place by an async round
+    // trip, and a binding on it alone would not reliably re-run.
+    property int hyprRevision: 0
+
+    // Is the panel actually emitting? Two ways for it not to be, and both
+    // otherwise let the stats accrue "wear avoided" against dark pixels.
+    property bool displayAwake: true
+    readonly property bool locked: {
+        try {
+            var lock = shell && typeof shell.serviceFor === "function"
+                ? shell.serviceFor("omarchy.lock") : null
+            return lock ? !!lock.locked : false
+        } catch (e) {
+            return false
+        }
+    }
+    readonly property bool lit: displayAwake && !locked
 
     property var stats: GuardModel.emptyStats()
     property bool statsLoaded: false
@@ -54,16 +73,23 @@ Item {
     readonly property bool barHidden: shell && shell.bar ? !!shell.bar.barHidden : false
 
     // ------------------------------------------------------------ attenuation
+    //
+    // Screen-independent part only. Fullscreen is resolved per overlay, since
+    // it is a per-monitor fact.
     readonly property real attenuation: GuardModel.attenuationFor({
         enabled: config.enabled,
         paused: root.paused,
         barHidden: root.barHidden,
-        suspendOnFullscreen: config.suspendOnFullscreen,
-        fullscreen: root.fullscreen,
+        lit: root.lit,
         idle: root.idle,
         baseOpacity: config.baseOpacity,
         idleOpacity: config.idleOpacity
     })
+
+    // What the panel receives on average, once checkerboard's alpha ceiling is
+    // taken into account. This is the figure that gets reported and banked.
+    readonly property real deliveredAttenuation: GuardModel.effectiveAttenuation(
+        root.attenuation, config.checkerboard)
 
     readonly property bool active: attenuation > 0
 
@@ -72,9 +98,16 @@ Item {
             enabled: config.enabled,
             paused: root.paused,
             active: root.active,
-            attenuation: Math.round(root.attenuation * 100) / 100,
+            // requested is what the config asked for; delivered is what the
+            // panel gets. They differ in checkerboard mode above 0.5, where
+            // alpha saturation caps the average.
+            attenuation: Math.round(root.deliveredAttenuation * 100) / 100,
+            requestedAttenuation: Math.round(root.attenuation * 100) / 100,
             mode: config.checkerboard ? "checkerboard" : "dim",
             idle: root.idle,
+            lit: root.lit,
+            locked: root.locked,
+            displayAwake: root.displayAwake,
             fullscreen: root.fullscreen,
             edge: root.edge,
             thickness: root.barThickness,
@@ -87,37 +120,32 @@ Item {
 
     // ------------------------------------------------------------- fullscreen
     //
-    // Read off the focused workspace's raw hyprctl payload. Guarded rather than
-    // bound directly: the shape of lastIpcObject is Hyprland's, not ours, and a
-    // missing key here must not take the shell down with it.
-    function refreshFullscreen() {
-        if (!config.suspendOnFullscreen) {
-            root.fullscreen = false
-            return
-        }
-        var value = false
+    // Only for `status` and the bar tooltip: it reports the focused screen.
+    // The veil decision is made per overlay, against its own screen.
+    readonly property bool fullscreen: {
+        hyprRevision // re-evaluate when the workspace payload is refreshed
         try {
             var ws = Hyprland.focusedWorkspace
             var raw = ws ? ws.lastIpcObject : null
-            if (raw)
-                value = !!(raw.hasfullscreen || raw.hasFullscreen)
+            return raw ? !!(raw.hasfullscreen || raw.hasFullscreen) : false
         } catch (e) {
-            value = false
+            return false
         }
-        root.fullscreen = value
     }
 
     Connections {
+        // No ignoreUnknownSignals: if a future Quickshell renames these, the
+        // failure should be loud rather than silently disabling fullscreen
+        // detection and leaving the veil over somebody's film.
         target: Hyprland
-        ignoreUnknownSignals: true
 
         function onFocusedWorkspaceChanged() {
-            root.refreshFullscreen()
+            root.hyprRevision++
         }
 
         function onRawEvent(event) {
             // Cheap filter: only the events that can flip fullscreen state are
-            // worth a workspace refresh, and this fires on every Hyprland event.
+            // worth a refresh, and this fires on every Hyprland event.
             var name = ""
             try {
                 name = String(event.name || "")
@@ -125,11 +153,73 @@ Item {
                 return
             }
             if (name === "fullscreen" || name === "activewindow" || name === "closewindow"
-                    || name === "openwindow" || name === "workspace") {
+                    || name === "openwindow" || name === "workspace"
+                    || name === "focusedmon" || name === "monitoradded"
+                    || name === "monitorremoved") {
                 Hyprland.refreshWorkspaces()
-                root.refreshFullscreen()
+                Hyprland.refreshMonitors()
+                // refreshWorkspaces is an async round trip, so bumping here
+                // only covers the pre-refresh read; the settle timer below
+                // catches the state the refresh actually returned.
+                root.hyprRevision++
+                hyprSettleTimer.restart()
             }
         }
+    }
+
+    Timer {
+        id: hyprSettleTimer
+        interval: 120
+        repeat: false
+        onTriggered: root.hyprRevision++
+    }
+
+    // ------------------------------------------------------------------- DPMS
+    //
+    // Hyprland is the only thing that knows whether the panel is powered. Probed
+    // on idle transitions rather than polled: it can only change around one.
+    Process {
+        id: dpmsProbe
+        command: ["hyprctl", "monitors", "-j"]
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                var awake = true
+                try {
+                    var monitors = JSON.parse(text || "[]")
+                    if (Array.isArray(monitors) && monitors.length > 0) {
+                        awake = false
+                        for (var i = 0; i < monitors.length; i++) {
+                            if (monitors[i] && monitors[i].dpmsStatus) {
+                                awake = true
+                                break
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // Unparseable output must not be read as "panel is off":
+                    // that would silently stop all accounting.
+                    awake = true
+                }
+                root.displayAwake = awake
+            }
+        }
+    }
+
+    function refreshDpms() {
+        if (!dpmsProbe.running)
+            dpmsProbe.running = true
+    }
+
+    // Hyprland blanks the panel a while after idle begins, so one probe at the
+    // transition would miss it. Re-probe on a slow cadence while idle, and once
+    // more on wake.
+    Timer {
+        id: dpmsWhileIdle
+        interval: 30000
+        repeat: true
+        running: root.idle && root.config.tracking
+        onTriggered: root.refreshDpms()
     }
 
     // ------------------------------------------------------------------- idle
@@ -138,8 +228,16 @@ Item {
         enabled: root.config.enabled && !root.paused
         timeout: root.config.idleAfterSeconds
         respectInhibitors: true
-        onIsIdleChanged: root.idle = isIdle
+        onIsIdleChanged: {
+            root.idle = isIdle
+            root.refreshDpms()
+        }
     }
+
+    // The monitor is torn down while paused, and it is not guaranteed to
+    // report going un-idle on the way out. Without this a resume could snap
+    // straight to idleOpacity until the next keypress.
+    onPausedChanged: if (paused) idle = false
 
     // Rotating the checkerboard phase is what stops the pattern itself from
     // becoming the burn-in. Pointless in flat-dim mode, so it does not run.
@@ -172,7 +270,8 @@ Item {
         interval: root.trackIntervalSeconds * 1000
         repeat: true
         onTriggered: {
-            root.stats = GuardModel.accumulate(root.stats, root.trackIntervalSeconds, root.attenuation)
+            root.stats = GuardModel.accumulate(root.stats, root.trackIntervalSeconds,
+                                               root.deliveredAttenuation, root.lit)
             root.ticksSincePersist++
             if (root.ticksSincePersist >= root.persistEveryTicks)
                 root.persistStats()
@@ -230,6 +329,8 @@ Item {
             thickness: root.barThickness
             attenuation: root.attenuation
             checkerboard: root.config.checkerboard
+            suspendOnFullscreen: root.config.suspendOnFullscreen
+            hyprRevision: root.hyprRevision
             phaseX: GuardModel.phaseOffset(root.phase).x
             phaseY: GuardModel.phaseOffset(root.phase).y
             fadeMs: root.config.fadeMs
@@ -275,7 +376,14 @@ Item {
     }
 
     Component.onCompleted: {
-        refreshFullscreen()
+        refreshDpms()
         statsFile.reload()
+    }
+
+    // Best effort on disable/reload, so the tally does not lose up to a full
+    // persist interval every time the plugin is toggled.
+    Component.onDestruction: {
+        if (root.config.tracking && root.statsLoaded)
+            statsFile.setText(JSON.stringify(root.stats, null, 2) + "\n")
     }
 }
