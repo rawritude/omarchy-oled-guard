@@ -66,13 +66,12 @@ Two further limits:
   one-pixel checker. At fractional scales (1.25, 1.5) nearest-neighbour
   scaling makes cells uneven and the equal-time property degrades.
 
-Flat dim is the better default precisely *because* alpha compositing is
-available here. The existing Hyprland tool in this space,
+Flat dim is available at all here only because this is a compositing layer. The
+existing Hyprland tool in this space,
 [hyproled](https://github.com/mklan/hyproled), uses a checkerboard shader
 because a shader can only switch pixels fully off — it has no way to ask for
-"70% as bright". A QML overlay does, so it can reach the same wear target
-without throwing away contrast. The checkerboard mode is kept for people who
-want maximum protection and do not mind the texture.
+"70% as bright". A QML overlay can, which is why the default here is the mode
+hyproled could not offer.
 
 ## What this plugin deliberately does not do
 
@@ -141,10 +140,14 @@ Config changes hot-reload. Editing the plugin's `.js` requires
 
 ## Bar indicator
 
-Optional. `●` guarding · `◐` awake but not attenuating · `○` paused. Click to
-toggle pause. Set `"showSaved": true` to display reclaimed hours next to it —
-off by default, because a plugin whose job is to light fewer pixels should not
-insist on lighting more of them to say so.
+Optional. A Nerd Font shield, matching the first-party bar indicators:
+half-full while attenuating, outline while standing by, struck through and
+dimmed when paused. Hovering explains the current state; clicking toggles
+pause.
+
+Set `"showSaved": true` to display reclaimed hours next to it — off by default,
+because a plugin whose job is to light fewer pixels should not insist on
+lighting more of them to say so.
 
 ## Control
 
