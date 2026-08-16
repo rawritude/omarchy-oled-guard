@@ -138,16 +138,33 @@ so nothing about your bar changes while you are looking at it. Raise it to
 Config changes hot-reload. Editing the plugin's `.js` requires
 `omarchy restart shell` (plugin code is cached, `.qml` and `.js` alike).
 
-## Bar indicator
+## Bar indicator and panel
 
-Optional. A Nerd Font shield, matching the first-party bar indicators:
-half-full while attenuating, outline while standing by, struck through and
-dimmed when paused. Hovering explains the current state; clicking toggles
-pause.
+A Nerd Font shield matching the first-party bar indicators: half-full while
+attenuating, outline while standing by, struck through when paused.
 
-Set `"showSaved": true` to display reclaimed hours next to it — off by default,
-because a plugin whose job is to light fewer pixels should not insist on
-lighting more of them to say so.
+**Left click opens a panel** — protection level, depth, and the reclaimed-time
+figure, so nothing here needs hand-editing `shell.json`. **Right click** pauses
+and resumes without opening anything.
+
+```
+  PROTECTION   Off  ·  Dim  ·  Checker
+  DEPTH        Light  ·  Medium  ·  Deep
+  BAR          Hide the bar
+```
+
+Depth is presets rather than raw opacities, because "how protected do you want
+to be" is the question people actually have. Light is 10%/40%, Medium 15%/55%,
+Deep 25%/75% — working and idle respectively.
+
+The **Hide the bar** row sits deliberately beside the attenuation controls: not
+drawing the bar beats attenuating it, Omarchy already ships that toggle, and
+the two belong next to each other rather than in separate places.
+
+This panel is the one file that imports Omarchy's internal `qs.*` UI module, so
+it matches every other dropdown. The service and the overlay stay
+dependency-free — if a future Omarchy release moves that module, the indicator
+is what breaks, never the guarding.
 
 ## Control
 
@@ -158,6 +175,15 @@ omarchy-shell oledguard resume
 omarchy-shell oledguard toggle
 omarchy-shell oledguard flush     # force stats to disk
 omarchy-shell oledguard reset     # zero the accumulated stats
+```
+
+The panel exposes the same choices, so they can go on a keybinding:
+
+```bash
+omarchy-shell oled.guard mode off|dim|checker
+omarchy-shell oled.guard depth light|medium|deep
+omarchy-shell oled.guard toggle   # open/close the panel
+omarchy-shell oled.guard state
 ```
 
 Pause is deliberately not persisted — it means "not right now". For "not ever",
