@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "oled.guard",
+  "name": "OLED Guard",
+  "version": "0.1.0",
+  "author": "raph",
+  "description": "Panel care for OLED displays: attenuates the always-on bar strip so it stops out-wearing the rest of the panel, and tracks cumulative panel hours.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "defaultSection": "right"
+  }
+}
