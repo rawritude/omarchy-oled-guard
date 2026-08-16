@@ -11,9 +11,13 @@
   ],
   "entryPoints": {
     "service": "Service.qml",
-    "barWidget": "BarWidget.qml"
+    "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "defaultSection": "right"
+    "defaultSection": "right",
+    "displayName": "OLED Guard",
+    "description": "Panel-care status and protection level",
+    "category": "System",
+    "allowMultiple": false
   }
 }
