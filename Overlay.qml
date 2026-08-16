@@ -38,7 +38,11 @@ PanelWindow {
         if (!suspendOnFullscreen)
             return false
         try {
-            var monitor = Hyprland.monitorFor(overlay.screen)
+            // modelData, not overlay.screen: `screen` is a window property, and
+            // reading it here closes a loop back through visible -> veilOpacity
+            // -> this binding. modelData is the same screen, straight from
+            // Variants, and depends on nothing downstream.
+            var monitor = Hyprland.monitorFor(modelData)
             var ws = monitor ? monitor.activeWorkspace : null
             var raw = ws ? ws.lastIpcObject : null
             return raw ? !!(raw.hasfullscreen || raw.hasFullscreen) : false

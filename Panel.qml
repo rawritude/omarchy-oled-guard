@@ -171,6 +171,13 @@ Panel {
         barToggle.running = true
     }
 
+    // Ui.Panel is a bare Item with no sizing of its own, and the bar takes each
+    // slot's size straight from the widget's implicit size. Without these the
+    // slot is zero-wide: the panel still loads and still answers IPC, it just
+    // paints nothing and reads as a missing icon.
+    implicitWidth: button.implicitWidth
+    implicitHeight: button.implicitHeight
+
     BarIconButton {
         id: button
         anchors.fill: parent
