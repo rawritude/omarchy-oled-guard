@@ -3,6 +3,8 @@
 An [Omarchy](https://omarchy.org/) shell plugin that stops your status bar from
 out-wearing the rest of your OLED panel.
 
+![OLED Guard panel](preview.png)
+
 ## The problem
 
 OLED wear is luminance integrated over time. On a desktop, almost every pixel
