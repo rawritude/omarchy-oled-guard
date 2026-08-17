@@ -47,7 +47,8 @@ Panel {
         return guardActive ? glyphGuarding : glyphStandby
     }
 
-    readonly property string modeValue: !guardEnabled ? "off" : (guardChecker ? "checker" : "dim")
+    readonly property string powerValue: guardEnabled ? "on" : "off"
+    readonly property string lookValue: guardChecker ? "checker" : "flat"
 
     // Depth presets. Named rather than numeric because "how protected do you
     // want to be" is the question people actually have; the opacities are an
@@ -114,9 +115,24 @@ Panel {
             root.bar.shell.updateEntryInline(root.moduleName, entry)
     }
 
-    function setMode(value) {
+    function setPower(value) {
         if (value === "off") {
             applySettings({ enabled: false })
+            return
+        }
+        applySettings({ enabled: true })
+        if (root.service)
+            root.service.paused = false
+    }
+
+    function setLook(value) {
+        applySettings({ checkerboard: value === "checker" })
+    }
+
+    // Kept for scripts: one verb that sets both at once.
+    function setMode(value) {
+        if (value === "off") {
+            setPower("off")
             return
         }
         applySettings({ enabled: true, checkerboard: value === "checker" })
@@ -157,8 +173,22 @@ Panel {
             return v
         }
 
+        // flat | checker
+        function look(value: string): string {
+            var v = String(value || "")
+            if (v !== "flat" && v !== "checker")
+                return "expected flat|checker"
+            root.setLook(v)
+            return v
+        }
+
         function state(): string {
-            return JSON.stringify({ mode: root.modeValue, depth: root.depthValue, opened: root.opened })
+            return JSON.stringify({
+                power: root.powerValue,
+                look: root.lookValue,
+                depth: root.depthValue,
+                opened: root.opened
+            })
         }
     }
 
@@ -254,13 +284,12 @@ Panel {
 
                 ButtonGroup {
                     width: parent.width
-                    value: root.modeValue
+                    value: root.powerValue
                     options: [
                         { value: "off", label: "Off", tooltip: "No attenuation at all" },
-                        { value: "dim", label: "Dim", tooltip: "Flat attenuation across the bar strip" },
-                        { value: "checker", label: "Checker", tooltip: "Rotating checkerboard. Not more protective than Dim, and textured" }
+                        { value: "on", label: "On", tooltip: "Attenuate the bar strip" }
                     ]
-                    onChanged: function (value) { root.setMode(value) }
+                    onChanged: function (value) { root.setPower(value) }
                 }
 
                 PanelSectionHeader { text: "DEPTH" }
@@ -276,6 +305,36 @@ Panel {
                         { value: "deep", label: "Deep", tooltip: "25% while working, 75% idle" }
                     ]
                     onChanged: function (value) { root.setDepth(value) }
+                }
+
+                // Deliberately its own section, below DEPTH and named for what
+                // it is. Sitting in the protection row it read as a third,
+                // strongest setting -- the opposite of true. Checker delivers
+                // the same average attenuation as Flat but concentrates it,
+                // leaving half the pixels at full drive; under superlinear
+                // ageing that is worse, and worse the deeper you set it.
+                PanelSectionHeader { text: "LOOK" }
+
+                ButtonGroup {
+                    width: parent.width
+                    enabled: root.guardEnabled
+                    opacity: root.guardEnabled ? 1 : 0.4
+                    value: root.lookValue
+                    options: [
+                        { value: "flat", label: "Flat", tooltip: "Even attenuation. Protects best at every depth." },
+                        { value: "checker", label: "Checker", tooltip: "Textured. Same average, worse for wear \u2014 a look, not more protection." }
+                    ]
+                    onChanged: function (value) { root.setLook(value) }
+                }
+
+                Text {
+                    width: parent.width
+                    visible: root.guardChecker
+                    wrapMode: Text.WordWrap
+                    text: "Checker is a texture, not more protection \u2014 Flat protects better."
+                    color: Qt.darker(root.bar ? root.bar.foreground : Color.foreground, 1.6)
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
                 }
 
                 PanelSeparator { width: parent.width }

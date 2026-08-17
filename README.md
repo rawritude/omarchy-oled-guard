@@ -44,13 +44,56 @@ and the veil stops drawing, because there is nothing left to protect.
 is covered at double alpha and the other half not at all, rotating the phase
 every `checkerPhaseMinutes` so the pattern itself cannot etch in.
 
-**It does not save more wear than flat dim.** At equal average the two are
-level under a linear model, and checkerboard is slightly *worse* under
-realistic OLED aging, which is superlinear in drive level: phase rotation
-leaves every pixel at full drive half the time, and for a convex wear curve the
-average of the two extremes exceeds the middle. It is offered for people who
-want the deep-rest behaviour, not as an upgrade — which is the other reason
-flat dim is the default.
+**It is a look, not a protection level — and it protects worse.**
+
+Both modes deliver the same *average* attenuation; they differ only in how it
+is distributed. Flat holds every pixel at `1-a`. Checker leaves half the pixels
+at full drive and the other half at `1-2a`, swapping which half on each phase
+rotation. Under a linear wear model those are identical. OLED ageing is not
+linear — it is superlinear in drive level — and for a convex wear curve the
+average of two extremes exceeds the middle. Modelling wear as `L^γ`:
+
+| average attenuation | γ=1 (linear) | γ=2 (realistic) | γ=2.5 |
+|---|---|---|---|
+| 0.15 — Light | equal | +3% worse | +6% worse |
+| 0.25 — Deep | equal | **+11% worse** | +21% worse |
+| 0.50 | equal | **+100% worse** | +183% worse |
+
+Note the direction: **checker gets worse the harder you push it.** The setting
+that feels most aggressive is the one where it loses by the most.
+
+So what is it for? Exactly one thing: half the pixels stay at *full* drive, so
+peak per-pixel contrast survives while average emission drops. That is a
+legibility property, and it only reads as intended at display scale 1, where
+the eye integrates the pattern spatially. At scale 2 the cells are 2×2 physical
+pixels and you simply see texture.
+
+It lives under **LOOK** in the panel, not under PROTECTION, for that reason.
+
+### "But doesn't rotating the pixels help?"
+
+The most natural objection, and worth answering directly. Three things undercut
+it:
+
+- **The rest is smaller than it looks.** Covered pixels are not off. The veil
+  paints alpha `2a`, so at Deep they run at 50% drive, not 0%. They only go
+  truly dark at `a = 0.5` — checker's *worst* case, not its best.
+- **The full-drive half costs more than the resting half saves.** That is the
+  table above. Both modes have identical average drive; only distribution
+  differs, and superlinear wear punishes the extremes.
+- **Rotation is mandatory given checker, not a bonus.** Without it the
+  checkerboard would etch its own pattern into the strip. Flat dim never
+  creates that problem, so it needs no fix. Rotation is checker solving
+  something only checker causes.
+
+Rotation genuinely wins when you *cannot* dim. A shader can only switch pixels
+fully on or off, so rotating which ones are off is the only lever available —
+which is exactly hyproled's situation, and why the technique exists there.
+
+One honest limit: `L^γ` models permanent degradation. OLEDs also have a
+transient, partly-recoverable component where real off-time does help, and
+these numbers do not capture it. That narrows the gap; it should not reverse
+it, since the permanent component is what produces burn-in.
 
 Two further limits:
 
@@ -148,10 +191,14 @@ figure, so nothing here needs hand-editing `shell.json`. **Right click** pauses
 and resumes without opening anything.
 
 ```
-  PROTECTION   Off  ·  Dim  ·  Checker
+  PROTECTION   Off  ·  On
   DEPTH        Light  ·  Medium  ·  Deep
+  LOOK         Flat  ·  Checker
   BAR          Hide the bar
 ```
+
+LOOK is a separate section on purpose. Sitting in the protection row, Checker
+read as a third and strongest setting — the opposite of true.
 
 Depth is presets rather than raw opacities, because "how protected do you want
 to be" is the question people actually have. Light is 10%/40%, Medium 15%/55%,
@@ -180,7 +227,8 @@ omarchy-shell oledguard reset     # zero the accumulated stats
 The panel exposes the same choices, so they can go on a keybinding:
 
 ```bash
-omarchy-shell oled.guard mode off|dim|checker
+omarchy-shell oled.guard mode off|dim|checker   # sets power and look at once
+omarchy-shell oled.guard look flat|checker
 omarchy-shell oled.guard depth light|medium|deep
 omarchy-shell oled.guard toggle   # open/close the panel
 omarchy-shell oled.guard state
