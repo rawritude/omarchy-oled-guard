@@ -219,6 +219,21 @@ a background service and an optional bar indicator, and reads its config from
 whichever entry exists — the `bar.layout` entry if you enabled the widget, or a
 `plugins[]` entry if you want the service without the indicator.
 
+## Removing it
+
+```bash
+omarchy plugin remove oled.guard
+```
+
+That unloads the service, drops the veil immediately, and removes the bar entry
+from `~/.config/omarchy/shell.json`. A timestamped copy of the plugin directory
+is left in `~/.config/omarchy/plugins/` in case you want it back; delete it at
+your leisure. Nothing is written anywhere else — no state files, no dotfiles, no
+system configuration.
+
+To keep it installed but inert, set `"enabled": false`, or press **Off** in the
+panel.
+
 ## Configuration
 
 All keys are optional; the defaults below are what you get with an empty entry.
