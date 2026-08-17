@@ -22,21 +22,38 @@ PanelWindow {
     property int hyprRevision: 0
     property int phaseX: 0
     property int phaseY: 0
-    property int fadeMs: 1500
-    property int revealMs: 140
+    property int fadeMs: 700
+    property int revealMs: 170
     property bool hovered: false
     property bool revealOnHover: false
 
-    // Which duration applies is decided from the same inputs that move the
-    // target, not from the animation's own progress -- deriving it from the
-    // painted opacity would re-evaluate mid-flight and risk restarting the
-    // animation it is meant to be timing.
+    // Direction is read from the values themselves at the instant the animation
+    // starts, never from a flag that has to arrive first.
     //
-    // Fullscreen counts as a reveal too: a film just started, and leaving a
-    // veil across the top of it for a second and a half is the bug this whole
-    // suspend exists to avoid.
-    readonly property bool revealingFast: (revealOnHover && hovered) || screenFullscreen
-    readonly property int transitionMs: revealingFast ? revealMs : fadeMs
+    // The flag version was subtly and consistently wrong: `attenuation` reaches
+    // this overlay through the service while `hovered` is bound locally, so the
+    // opacity target routinely landed before the duration did and every
+    // transition ran with the previous state's timing -- a slow reveal and a
+    // snapped re-veil, exactly backwards. Comparing target against painted
+    // value cannot get that wrong, because both are current by construction.
+    function retime(anim, item, target) {
+        var clearing = target < item.opacity
+        anim.stop()
+        anim.duration = clearing ? overlay.revealMs : overlay.fadeMs
+        anim.easing.type = clearing ? Easing.OutCubic : Easing.InOutSine
+        anim.from = item.opacity
+        anim.to = target
+        anim.start()
+    }
+
+    readonly property real targetFloor: layers.floor
+    readonly property real targetChecker: layers.checker
+
+    onTargetFloorChanged: retime(floorAnim, floorVeil, targetFloor)
+    onTargetCheckerChanged: retime(checkerAnim, checkerVeil, targetChecker)
+
+    NumberAnimation { id: floorAnim; target: floorVeil; property: "opacity" }
+    NumberAnimation { id: checkerAnim; target: checkerVeil; property: "opacity" }
 
     readonly property bool verticalEdge: edge === "left" || edge === "right"
 
@@ -113,21 +130,14 @@ PanelWindow {
             id: floorVeil
             anchors.fill: parent
             color: "black"
-            opacity: overlay.layers.floor
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: overlay.transitionMs
-                    easing.type: overlay.revealingFast ? Easing.OutCubic : Easing.InOutQuad
-                }
-            }
+            opacity: 0
         }
 
         Image {
             id: checkerVeil
             source: Qt.resolvedUrl("checker.png")
             fillMode: Image.Tile
-            opacity: overlay.layers.checker
+            opacity: 0
 
             // Offset by the current phase and oversize to match, so rotating
             // the pattern never uncovers an edge of the strip.
@@ -139,13 +149,6 @@ PanelWindow {
             smooth: false
             mipmap: false
             cache: true
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: overlay.transitionMs
-                    easing.type: overlay.revealingFast ? Easing.OutCubic : Easing.InOutQuad
-                }
-            }
         }
     }
 }

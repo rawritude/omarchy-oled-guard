@@ -24,8 +24,8 @@ var DEFAULTS = {
     // so it has to feel immediate; putting it back is unprompted, so it should
     // be slow enough that you never catch it happening. One duration for both
     // makes you choose between a sluggish reveal and a visibly blinking bar.
-    fadeMs: 1500,
-    revealMs: 140,
+    fadeMs: 700,
+    revealMs: 170,
 
     // Texture mode: a flat floor across the strip plus a shallow checker over
     // half of it, rotating so the pattern cannot etch itself in.

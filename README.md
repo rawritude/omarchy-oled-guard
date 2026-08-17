@@ -163,12 +163,13 @@ unprompted, so it should be slow enough that you never catch it happening. A
 single duration forces a choice between a sluggish reveal and a visibly
 blinking bar. Measured peak drive on the bar:
 
-| moment | peak drive |
-|---|---|
-| at rest | 33 / 255 |
-| ~100 ms after the pointer arrives | **255 / 255** — already clear |
-| ~100 ms after it leaves | 151 / 255 — still mid-fade |
-| settled, pointer away | 33 / 255 |
+| transition | ~100 ms | ~250 ms | settled |
+|---|---|---|---|
+| clearing | 55 / 255 | — | 194 / 255 |
+| veiling back | 194 / 255 | 194 / 255 | 33 / 255 |
+
+Clearing ramps immediately; veiling holds and then eases down, so the bar never
+appears to blink when you glance away.
 
 Fullscreen counts as a reveal too, and uses the fast path: a film just started,
 and leaving a veil across the top of it for a second and a half is the bug the
@@ -228,8 +229,8 @@ All keys are optional; the defaults below are what you get with an empty entry.
   "baseOpacity": 0.0,          // 0.0-0.9  standing attenuation while active
   "idleOpacity": 0.5,          // 0.0-0.95 attenuation once idle
   "idleAfterSeconds": 90,      // 5-3600
-  "fadeMs": 1500,              // veiling back: slow, so you never catch it
-  "revealMs": 140,             // clearing: fast, it answers a gesture
+  "fadeMs": 700,               // veiling back: gradual, so you never catch it
+  "revealMs": 170,             // clearing: fast, it answers a gesture
 
   "checkerboard": false,       // true adds the rotating texture over the floor
   "checkerPhaseMinutes": 5,    // 1-720
