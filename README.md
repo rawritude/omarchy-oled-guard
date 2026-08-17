@@ -32,8 +32,6 @@ Holds a translucent veil over the bar strip, and only the bar strip.
 - **Reveal on hover** (`revealOnHover`) — the veil clears the instant the
   pointer reaches the bar, the way Omarchy's own indicators reveal themselves.
   This is the setting that makes deep attenuation practical.
-- **Wear accounting** — tracks how much lit time it has actually reclaimed, so
-  the plugin can be judged on numbers instead of vibes.
 
 It follows the bar: change `bar.position` to `left` and the veil moves to the
 left edge, resize the bar and the veil resizes with it. Hide the bar entirely
@@ -241,8 +239,7 @@ All keys are optional; the defaults below are what you get with an empty entry.
   "revealOnHover": false,      // clear the veil while the pointer is on the bar
   "hoverOpacity": 0.0,         // 0.0-0.9  attenuation while hovered
 
-  "suspendOnFullscreen": true, // lift the veil over fullscreen content
-  "tracking": true             // record reclaimed lit time
+  "suspendOnFullscreen": true  // lift the veil over fullscreen content
 }
 ```
 
@@ -292,12 +289,10 @@ is what breaks, never the guarding.
 ## Control
 
 ```bash
-omarchy-shell oledguard status    # JSON: state, geometry, accumulated stats
+omarchy-shell oledguard status    # JSON: state and geometry
 omarchy-shell oledguard pause     # lift the veil for now
 omarchy-shell oledguard resume
 omarchy-shell oledguard toggle
-omarchy-shell oledguard flush     # force stats to disk
-omarchy-shell oledguard reset     # zero the accumulated stats
 ```
 
 The panel exposes the same choices, so they can go on a keybinding:
@@ -315,32 +310,20 @@ omarchy-shell oled.guard state
 Pause is deliberately not persisted — it means "not right now". For "not ever",
 set `"enabled": false`.
 
-## Wear accounting
+## What it does not keep
 
-Stats live in `~/.local/state/omarchy/oled-guard.json`:
+There is no running tally of light saved. An earlier version tracked one, and it
+was the single worst part of the plugin: it accrued "wear avoided" against a
+locked screen, it banked attenuation the checkerboard never actually delivered,
+and it sampled once a minute at whatever value happened to be live on the tick —
+which got materially wronger once hover-reveal started flipping attenuation
+several times a minute.
 
-| field | meaning |
-|---|---|
-| `panelSeconds` | time the panel was actually lit: awake, unlocked, shell up |
-| `guardedSeconds` | of that, time the veil was actually attenuating |
-| `savedSeconds` | attenuation-weighted lit time avoided on the strip |
-
-`savedSeconds` integrates delivered attenuation × duration. At `baseOpacity:
-0.4` held for a minute it records 24 seconds.
-
-What it deliberately refuses to count:
-
-- **Time the panel was not emitting.** A locked session or a slept display
-  advances nothing at all. Counting those would let an overnight idle inflate
-  the totals toward `idleOpacity` regardless of what the guard did.
-- **Attenuation it did not actually deliver.** In checkerboard mode above
-  `0.5`, the delivered average is banked, not the configured one.
-
-Two known limits: the estimate is **conservative** — alpha composites in gamma
-space, so black at alpha 0.4 cuts linear luminance by rather more than 40%, and
-under-claiming is the right direction here. And accounting is sampled once a
-minute at the attenuation prevailing at the tick, so brief transitions are
-approximated. Stats are written every five minutes and on shutdown.
+Every one of those was fixable. None of them was worth fixing, because the
+number was never actionable: nobody changes anything on being told "13m
+reclaimed". The figures worth trusting are the measured ones in this README —
+peak drive, wear penalties, contrast ratios — and those do not need a counter
+running in your shell to stay true.
 
 ## Requirements
 

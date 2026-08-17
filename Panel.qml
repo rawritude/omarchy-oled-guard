@@ -3,7 +3,6 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
-import "GuardModel.js" as GuardModel
 
 // Bar indicator plus its dropdown.
 //
@@ -92,17 +91,6 @@ Panel {
         if (guardActive)
             return "attenuating " + Math.round(service.attenuation * 100) + "%"
         return "standing by"
-    }
-
-    readonly property string savedLine: {
-        if (!service || !service.stats)
-            return ""
-        try {
-            return GuardModel.formatHours(service.stats.savedSeconds) + " reclaimed \u00b7 "
-                    + GuardModel.formatHours(service.stats.panelSeconds) + " lit"
-        } catch (e) {
-            return ""
-        }
     }
 
     // Write back through the widget's own shell.json entry, the same way the
@@ -361,20 +349,6 @@ Panel {
                     onChanged: function (value) { root.setLook(value) }
                 }
 
-                PanelSeparator {
-                    width: parent.width
-                    visible: root.savedLine !== ""
-                }
-
-                Text {
-                    width: parent.width
-                    visible: root.savedLine !== ""
-                    text: root.savedLine
-                    wrapMode: Text.WordWrap
-                    color: Qt.darker(root.bar ? root.bar.foreground : Color.foreground, 1.6)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                }
             }
         }
     }

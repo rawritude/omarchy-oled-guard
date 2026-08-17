@@ -56,9 +56,7 @@ var DEFAULTS = {
     hoverOpacity: 0.0,
 
     // Never attenuate over fullscreen content -- dimming a film is a bug.
-    suspendOnFullscreen: true,
-
-    tracking: true
+    suspendOnFullscreen: true
 }
 
 var EDGES = ["top", "bottom", "left", "right"]
@@ -136,8 +134,7 @@ function normalize(raw) {
         checkerContrast: clamp(asNumber(src.checkerContrast, DEFAULTS.checkerContrast), 0.05, 1),
         revealOnHover: asBool(src.revealOnHover, DEFAULTS.revealOnHover),
         hoverOpacity: clamp(asNumber(src.hoverOpacity, DEFAULTS.hoverOpacity), 0, 0.9),
-        suspendOnFullscreen: asBool(src.suspendOnFullscreen, DEFAULTS.suspendOnFullscreen),
-        tracking: asBool(src.tracking, DEFAULTS.tracking)
+        suspendOnFullscreen: asBool(src.suspendOnFullscreen, DEFAULTS.suspendOnFullscreen)
     }
 }
 
@@ -162,10 +159,8 @@ function attenuationFor(state) {
         return 0
     if (state.barHidden)
         return 0
-    // A locked session covers the bar, and a slept panel emits nothing. Veiling
-    // either is pointless, and -- the reason this matters -- banking "wear
-    // avoided" for pixels that were dark or unpowered would make the headline
-    // number drift toward idleOpacity no matter what the guard actually did.
+    // A lock surface covers the bar entirely, so there is nothing underneath
+    // worth veiling and no reason to keep compositing one.
     if (!state.lit)
         return 0
     // Hover wins over idle: reaching for the bar is input, so the two cannot
@@ -236,67 +231,4 @@ function effectiveAttenuation(attenuation, checkerboard, checkerContrast) {
 function phaseOffset(phase) {
     var p = ((phase % 2) + 2) % 2
     return { x: p, y: 0 }
-}
-
-function emptyStats() {
-    return {
-        version: 1,
-        panelSeconds: 0, // time the panel was lit: awake, unlocked, shell up
-        guardedSeconds: 0, // of that, time the guard was actually attenuating
-        savedSeconds: 0 // attenuation-weighted lit time avoided on the strip
-    }
-}
-
-function normalizeStats(raw) {
-    var base = emptyStats()
-    if (!raw || typeof raw !== "object")
-        return base
-    base.panelSeconds = Math.max(0, asNumber(raw.panelSeconds, 0))
-    base.guardedSeconds = Math.max(0, asNumber(raw.guardedSeconds, 0))
-    base.savedSeconds = Math.max(0, asNumber(raw.savedSeconds, 0))
-    return base
-}
-
-// One tick of wear accounting.
-//
-// `attenuation` must be the *delivered* average (see effectiveAttenuation), and
-// `lit` must be false whenever the panel was not actually emitting -- asleep,
-// or covered by the lock surface. A tick that is not lit advances nothing at
-// all, so an overnight idle cannot inflate the totals.
-//
-// attenuation * seconds is a deliberately conservative estimate of the
-// emitted-light-seconds avoided: alpha composites in gamma space, so black at
-// alpha 0.4 cuts linear luminance by rather more than 40%. Under-claiming is
-// the right direction for a number the README asks anyone to trust.
-function accumulate(stats, deltaSeconds, attenuation, lit) {
-    var next = normalizeStats(stats)
-    if (!lit)
-        return next
-    var delta = Math.max(0, asNumber(deltaSeconds, 0))
-    var alpha = clamp(asNumber(attenuation, 0), 0, 1)
-    next.panelSeconds += delta
-    if (alpha > 0) {
-        next.guardedSeconds += delta
-        next.savedSeconds += delta * alpha
-    }
-    return next
-}
-
-function formatHours(seconds) {
-    var hours = Math.max(0, asNumber(seconds, 0)) / 3600
-    if (hours < 1)
-        return Math.round(hours * 60) + "m"
-    if (hours < 100)
-        return (Math.round(hours * 10) / 10) + "h"
-    return Math.round(hours) + "h"
-}
-
-// Share of the strip's lit time this guard has clawed back. This is the number
-// worth reporting: it is what separates "the bar is dimmer" from "the bar is
-// ageing at the same rate as the rest of the panel".
-function savedFraction(stats) {
-    var s = normalizeStats(stats)
-    if (s.panelSeconds <= 0)
-        return 0
-    return clamp(s.savedSeconds / s.panelSeconds, 0, 1)
 }

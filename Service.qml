@@ -25,9 +25,6 @@ Item {
     property string omarchyPath: ""
     property var manifest: null
 
-    readonly property string home: Quickshell.env("HOME")
-    readonly property string statsPath: home + "/.local/state/omarchy/oled-guard.json"
-
     readonly property var config: GuardModel.normalize(
         GuardModel.entryFor(shell ? shell.shellConfig : null, GuardModel.PLUGIN_ID))
 
@@ -45,9 +42,7 @@ Item {
     // trip, and a binding on it alone would not reliably re-run.
     property int hyprRevision: 0
 
-    // Is the panel actually emitting? Two ways for it not to be, and both
-    // otherwise let the stats accrue "wear avoided" against dark pixels.
-    property bool displayAwake: true
+    // A lock surface covers the bar, so there is nothing worth veiling under it.
     readonly property bool locked: {
         try {
             var lock = shell && typeof shell.serviceFor === "function"
@@ -57,10 +52,7 @@ Item {
             return false
         }
     }
-    readonly property bool lit: displayAwake && !locked
-
-    property var stats: GuardModel.emptyStats()
-    property bool statsLoaded: false
+    readonly property bool lit: !locked
 
     // --------------------------------------------------------------- geometry
     //
@@ -119,14 +111,9 @@ Item {
             revealOnHover: config.revealOnHover,
             lit: root.lit,
             locked: root.locked,
-            displayAwake: root.displayAwake,
             fullscreen: root.fullscreen,
             edge: root.edge,
-            thickness: root.barThickness,
-            panelHours: GuardModel.formatHours(root.stats.panelSeconds),
-            guardedHours: GuardModel.formatHours(root.stats.guardedSeconds),
-            savedHours: GuardModel.formatHours(root.stats.savedSeconds),
-            savedFraction: Math.round(GuardModel.savedFraction(root.stats) * 1000) / 1000
+            thickness: root.barThickness
         }
     }
 
@@ -186,64 +173,13 @@ Item {
         onTriggered: root.hyprRevision++
     }
 
-    // ------------------------------------------------------------------- DPMS
-    //
-    // Hyprland is the only thing that knows whether the panel is powered. Probed
-    // on idle transitions rather than polled: it can only change around one.
-    Process {
-        id: dpmsProbe
-        command: ["hyprctl", "monitors", "-j"]
-        stdout: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: {
-                var awake = true
-                try {
-                    var monitors = JSON.parse(text || "[]")
-                    if (Array.isArray(monitors) && monitors.length > 0) {
-                        awake = false
-                        for (var i = 0; i < monitors.length; i++) {
-                            if (monitors[i] && monitors[i].dpmsStatus) {
-                                awake = true
-                                break
-                            }
-                        }
-                    }
-                } catch (e) {
-                    // Unparseable output must not be read as "panel is off":
-                    // that would silently stop all accounting.
-                    awake = true
-                }
-                root.displayAwake = awake
-            }
-        }
-    }
-
-    function refreshDpms() {
-        if (!dpmsProbe.running)
-            dpmsProbe.running = true
-    }
-
-    // Hyprland blanks the panel a while after idle begins, so one probe at the
-    // transition would miss it. Re-probe on a slow cadence while idle, and once
-    // more on wake.
-    Timer {
-        id: dpmsWhileIdle
-        interval: 30000
-        repeat: true
-        running: root.idle && root.config.tracking
-        onTriggered: root.refreshDpms()
-    }
-
     // ------------------------------------------------------------------- idle
     IdleMonitor {
         id: idleMonitor
         enabled: root.config.enabled && !root.paused
         timeout: root.config.idleAfterSeconds
         respectInhibitors: true
-        onIsIdleChanged: {
-            root.idle = isIdle
-            root.refreshDpms()
-        }
+        onIsIdleChanged: root.idle = isIdle
     }
 
     // The monitor is torn down while paused, and it is not guaranteed to
@@ -259,77 +195,6 @@ Item {
         interval: root.config.checkerPhaseMinutes * 60 * 1000
         repeat: true
         onTriggered: root.phase = (root.phase + 1) % 2
-    }
-
-    // --------------------------------------------------------------- tracking
-    readonly property int trackIntervalSeconds: 60
-
-    // Accounting happens every minute but only reaches disk every fifth one.
-    // This service runs for the entire life of the session; a write per minute
-    // forever is a lot of needless flash churn to record a counter nobody
-    // reads more than once a week.
-    readonly property int persistEveryTicks: 5
-    property int ticksSincePersist: 0
-
-    function persistStats() {
-        ticksSincePersist = 0
-        statsFile.setText(JSON.stringify(root.stats, null, 2) + "\n")
-    }
-
-    Timer {
-        id: trackTimer
-        running: root.config.tracking && root.statsLoaded
-        interval: root.trackIntervalSeconds * 1000
-        repeat: true
-        onTriggered: {
-            root.stats = GuardModel.accumulate(root.stats, root.trackIntervalSeconds,
-                                               root.deliveredAttenuation, root.lit)
-            root.ticksSincePersist++
-            if (root.ticksSincePersist >= root.persistEveryTicks)
-                root.persistStats()
-        }
-    }
-
-    FileView {
-        id: statsFile
-        path: root.statsPath
-        atomicWrites: true
-        printErrors: false
-
-        onLoaded: {
-            var parsed = null
-            try {
-                parsed = JSON.parse(text() || "{}")
-            } catch (e) {
-                parsed = null
-            }
-            root.stats = GuardModel.normalizeStats(parsed)
-            root.statsLoaded = true
-        }
-
-        // No file yet is the normal first run, not a problem to report.
-        onLoadFailed: function (error) {
-            root.stats = GuardModel.emptyStats()
-            root.statsLoaded = true
-        }
-    }
-
-    // On a first run there is no stats file, and a FileView pointed at a path
-    // that does not exist can settle without signalling either way. Without
-    // this the load never resolves, statsLoaded stays false, and the tracking
-    // timer that gates on it never starts -- so the guard would run forever
-    // and never record a single second of it.
-    Timer {
-        id: statsLoadFallback
-        interval: 2000
-        repeat: false
-        running: !root.statsLoaded
-        onTriggered: {
-            if (root.statsLoaded)
-                return
-            root.stats = GuardModel.emptyStats()
-            root.statsLoaded = true
-        }
     }
 
     // ---------------------------------------------------------------- surface
@@ -376,30 +241,7 @@ Item {
             return root.paused ? "paused" : "resumed"
         }
 
-        function reset(): string {
-            root.stats = GuardModel.emptyStats()
-            root.persistStats()
-            return "reset"
-        }
-
-        // Force the in-memory tally to disk. Worth having because the periodic
-        // write lags by up to five minutes, and anything reading the stats file
-        // directly deserves a way to see current numbers.
-        function flush(): string {
-            root.persistStats()
-            return GuardModel.formatHours(root.stats.panelSeconds)
-        }
     }
 
-    Component.onCompleted: {
-        refreshDpms()
-        statsFile.reload()
-    }
 
-    // Best effort on disable/reload, so the tally does not lose up to a full
-    // persist interval every time the plugin is toggled.
-    Component.onDestruction: {
-        if (root.config.tracking && root.statsLoaded)
-            statsFile.setText(JSON.stringify(root.stats, null, 2) + "\n")
-    }
 }
