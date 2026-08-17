@@ -257,9 +257,9 @@ Config changes hot-reload. Editing the plugin's `.js` requires
 A Nerd Font shield matching the first-party bar indicators: half-full while
 attenuating, outline while standing by, struck through when paused.
 
-**Left click opens a panel** — protection level, depth, and the reclaimed-time
-figure, so nothing here needs hand-editing `shell.json`. **Right click** pauses
-and resumes without opening anything.
+**Left click opens a panel** — level, reveal behaviour and look, so nothing here
+needs hand-editing `shell.json`. **Right click** pauses and resumes without
+opening anything.
 
 ```
   LEVEL    Off  ·  Light  ·  Med  ·  Deep  ·  Veil
@@ -326,6 +326,19 @@ number was never actionable: nobody changes anything on being told "13m
 reclaimed". The figures worth trusting are the measured ones in this README —
 peak drive, wear penalties, contrast ratios — and those do not need a counter
 running in your shell to stay true.
+
+## Known limitations
+
+- **Multi-monitor is unverified.** Fullscreen is resolved per screen, against
+  each overlay's own monitor rather than one global flag, specifically so a film
+  on one display is not veiled because another holds focus. That logic is
+  correct by construction and verified against live Hyprland state — but only on
+  a single-display machine. The multi-head path has never actually run. If you
+  hit a problem there, please open an issue; it is the one thing here I could
+  not test.
+- **Checkerboard degrades at fractional scaling.** The tile is 2x2 logical
+  pixels, so at 1.25 or 1.5 nearest-neighbour scaling makes the cells uneven and
+  the equal-time property weakens. Flat is unaffected, and is the default.
 
 ## Requirements
 
