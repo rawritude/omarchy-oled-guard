@@ -40,74 +40,97 @@ and the veil stops drawing, because there is nothing left to protect.
 
 **Flat dim** (default) applies uniform alpha across the strip.
 
-**Checkerboard** (`"checkerboard": true`) tiles a 2×2 pattern so half the strip
-is covered at double alpha and the other half not at all, rotating the phase
-every `checkerPhaseMinutes` so the pattern itself cannot etch in.
+**Checkerboard** (`"checkerboard": true`) paints two stacked veils: a flat floor
+across the whole strip, plus a shallow checker of depth `checkerContrast` over
+half of it, rotating so the pattern cannot etch itself in. The floor carries
+whatever attenuation the checker does not, so the delivered average always
+equals what you asked for.
 
-**It is a look, not a protection level — and it protects worse.**
+**It is a look, not a protection level — and it protects slightly worse.**
 
-Both modes deliver the same *average* attenuation; they differ only in how it
-is distributed. Flat holds every pixel at `1-a`. Checker leaves half the pixels
-at full drive and the other half at `1-2a`, swapping which half on each phase
-rotation. Under a linear wear model those are identical. OLED ageing is not
-linear — it is superlinear in drive level — and for a convex wear curve the
-average of two extremes exceeds the middle. Modelling wear as `L^γ`:
+Both modes deliver the same *average*; they differ only in how it is
+distributed. Under a linear wear model that is identical. OLED ageing is
+superlinear in drive level, and for a convex wear curve the average of two
+extremes exceeds the middle. Modelling wear as `L^γ`, the penalty depends
+**only** on the checker depth `k` — the floor term cancels out of the ratio
+entirely:
 
-| average attenuation | γ=1 (linear) | γ=2 (realistic) | γ=2.5 |
-|---|---|---|---|
-| 0.15 — Light | equal | +3% worse | +6% worse |
-| 0.25 — Deep | equal | **+11% worse** | +21% worse |
-| 0.50 | equal | **+100% worse** | +183% worse |
+| checker depth `k` | penalty vs flat (γ=2) |
+|---|---|
+| 0 — flat dim | +0.0% |
+| 0.10 | +0.3% |
+| **0.25 — the default** | **+2.0%** |
+| 0.50 | +11.1% |
+| 1.00 | +100% |
 
-Note the direction: **checker gets worse the harder you push it.** The setting
-that feels most aggressive is the one where it loses by the most.
+Which is why the floor exists. Painting the checker at `2a` with no floor also
+hits the average, and is what this plugin used to do — it cost 11% and left
+half the pixels at *full* drive. A floor plus `k=0.25` costs 2% for the same
+average and the same visible texture, and caps peak drive well below 100%.
 
-So what is it for? Exactly one thing: half the pixels stay at *full* drive, so
-peak per-pixel contrast survives while average emission drops. That is a
-legibility property, and it only reads as intended at display scale 1, where
-the eye integrates the pattern spatially. At scale 2 the cells are 2×2 physical
-pixels and you simply see texture.
+### Why "let the pixel rest" does not rescue it
+
+The natural defence is that the covered pixels get to rest. They do — but rest
+is not free. Holding the average fixed, you cannot darken one half without
+brightening its partner:
+
+| checker `k` | covered drive | uncovered drive |
+|---|---|---|
+| 0.00 | 0.750 | 0.750 |
+| 0.25 | 0.643 | 0.857 |
+| 0.50 | 0.500 | **1.000** |
+
+The covered half only reaches 0.50 because the uncovered half was pushed to
+full. The rest is funded by overdriving the neighbour, and superlinear wear
+charges more for the overdrive than it refunds for the rest. Every step toward
+a softer checker is a step *toward flat dim*, which is why the curve is
+monotonic with no interior optimum.
+
+This holds because off-time *pauses* wear accumulation rather than reversing
+it. If it reversed damage the conclusion would flip — which is true for the
+transient charge-trapping component, and not for the permanent emitter
+degradation that actually produces burn-in.
+
+**If you want more protection, raise Depth.** That darkens every pixel. Reaching
+for texture to get protection pays a wear penalty for something Depth gives you
+for free.
+
+So what is it for? Texture, and one real side effect: the covered and uncovered
+halves differ in drive, so per-pixel contrast varies across the strip in a way a
+flat dim does not produce. That is an aesthetic property. It reads as intended
+at display scale 1, where the eye integrates the pattern spatially; at scale 2
+the cells are 2x2 physical pixels and you simply see texture.
 
 It lives under **LOOK** in the panel, not under PROTECTION, for that reason.
 
-### "But doesn't rotating the pixels help?"
+### Rotation is mandatory, not a bonus
 
-The most natural objection, and worth answering directly. Three things undercut
-it:
+The phase rotates every `checkerPhaseMinutes` because without it the
+checkerboard would etch its own pattern into the strip -- a permanent
+half-brightness grid, caused entirely by the mode meant to prevent burn-in.
+Flat dim never creates that problem, so it needs no fix. Rotation is checker
+solving something only checker causes; it is not extra protection on top.
 
-- **The rest is smaller than it looks.** Covered pixels are not off. The veil
-  paints alpha `2a`, so at Deep they run at 50% drive, not 0%. They only go
-  truly dark at `a = 0.5` — checker's *worst* case, not its best.
-- **The full-drive half costs more than the resting half saves.** That is the
-  table above. Both modes have identical average drive; only distribution
-  differs, and superlinear wear punishes the extremes.
-- **Rotation is mandatory given checker, not a bonus.** Without it the
-  checkerboard would etch its own pattern into the strip. Flat dim never
-  creates that problem, so it needs no fix. Rotation is checker solving
-  something only checker causes.
+The tile is opaque on its diagonal, so it has exactly **two** distinct states,
+not four: offsetting by (1,1) maps black onto black and reproduces the original.
+An earlier four-step walk rendered P, P', P', P -- even total time, so wear
+levelling still held, but each state was held for two consecutive intervals and
+the effective period was double the setting. It now alternates strictly.
 
-Rotation genuinely wins when you *cannot* dim. A shader can only switch pixels
-fully on or off, so rotating which ones are off is the only lever available —
-which is exactly hyproled's situation, and why the technique exists there.
+Rotation genuinely wins where you *cannot* dim: a shader can only switch pixels
+fully on or off, so rotating which ones are off is the only lever available.
+That is hyproled's situation, and why the technique exists there.
 
-One honest limit: `L^γ` models permanent degradation. OLEDs also have a
-transient, partly-recoverable component where real off-time does help, and
-these numbers do not capture it. That narrows the gap; it should not reverse
-it, since the permanent component is what produces burn-in.
+One remaining limit: **the cell size follows your display scale.** The tile is
+2x2 *logical* pixels, so at scale 2 each cell covers a 2x2 block of physical
+pixels rather than one. Coverage is still 50% and rotation still swaps the
+covered set completely, so the arithmetic holds, but the texture is coarser
+than a true one-pixel checker. At fractional scales (1.25, 1.5) nearest
+neighbour scaling makes cells uneven and the equal-time property degrades.
 
-Two further limits:
-
-- **It cannot exceed 50% average attenuation.** The mode doubles alpha over
-  half the pixels, and alpha saturates at 1.0, so anything above `0.5` caps
-  out. The plugin reports this honestly rather than quietly booking the number
-  you asked for — `status` returns both `requestedAttenuation` and the
-  `attenuation` actually delivered, and only the delivered figure is banked.
-- **The cell size follows your display scale.** The tile is 2×2 *logical*
-  pixels, so at scale 2 each cell covers a 2×2 block of physical pixels rather
-  than one. Coverage is still 50% and rotation still swaps the covered set
-  completely, so the arithmetic holds, but the texture is coarser than a true
-  one-pixel checker. At fractional scales (1.25, 1.5) nearest-neighbour
-  scaling makes cells uneven and the equal-time property degrades.
+The old 50% ceiling is gone: because the floor absorbs whatever depth the
+checker cannot carry, the delivered average now equals the request at any
+depth.
 
 Flat dim is available at all here only because this is a compositing layer. The
 existing Hyprland tool in this space,
@@ -164,13 +187,13 @@ All keys are optional; the defaults below are what you get with an empty entry.
   "idleAfterSeconds": 90,      // 5-3600
   "fadeMs": 1500,              // transition length; 0 for instant
 
-  "checkerboard": false,       // true swaps flat dim for the rotating pattern
+  "checkerboard": false,       // true adds the rotating texture over the floor
   "checkerPhaseMinutes": 5,    // 1-720
+  "checkerContrast": 0.25,     // 0.05-1  depth of the checker layer. This alone
+                               // sets the wear penalty; 0.25 costs ~2%.
 
   "suspendOnFullscreen": true, // lift the veil over fullscreen content
-  "tracking": true,            // record reclaimed lit time
-
-  "showSaved": false           // bar widget only: show the reclaimed figure
+  "tracking": true             // record reclaimed lit time
 }
 ```
 
@@ -207,6 +230,16 @@ Deep 25%/75% — working and idle respectively.
 The **Hide the bar** row sits deliberately beside the attenuation controls: not
 drawing the bar beats attenuating it, Omarchy already ships that toggle, and
 the two belong next to each other rather than in separate places.
+
+It hides the surface this panel lives on, so the way back is printed under the
+button rather than left in a tooltip that vanishes with it:
+
+```
+Super + Ctrl + O  ->  Menu Bar
+```
+
+The Omarchy menu is its own overlay rather than part of the bar, so it stays
+reachable. `omarchy toggle bar` from any terminal does the same.
 
 This panel is the one file that imports Omarchy's internal `qs.*` UI module, so
 it matches every other dropdown. The service and the overlay stay

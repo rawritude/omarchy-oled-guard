@@ -89,7 +89,7 @@ Item {
     // What the panel receives on average, once checkerboard's alpha ceiling is
     // taken into account. This is the figure that gets reported and banked.
     readonly property real deliveredAttenuation: GuardModel.effectiveAttenuation(
-        root.attenuation, config.checkerboard)
+        root.attenuation, config.checkerboard, config.checkerContrast)
 
     readonly property bool active: attenuation > 0
 
@@ -99,8 +99,10 @@ Item {
             paused: root.paused,
             active: root.active,
             // requested is what the config asked for; delivered is what the
-            // panel gets. They differ in checkerboard mode above 0.5, where
-            // alpha saturation caps the average.
+            // panel gets. Equal by construction now that the checker sits on a
+            // floor rather than carrying the whole attenuation itself, but both
+            // are reported so a future mode that cannot hit its target has
+            // somewhere honest to say so.
             attenuation: Math.round(root.deliveredAttenuation * 100) / 100,
             requestedAttenuation: Math.round(root.attenuation * 100) / 100,
             mode: config.checkerboard ? "checkerboard" : "dim",
@@ -246,7 +248,7 @@ Item {
         running: root.config.enabled && root.config.checkerboard
         interval: root.config.checkerPhaseMinutes * 60 * 1000
         repeat: true
-        onTriggered: root.phase = (root.phase + 1) % 4
+        onTriggered: root.phase = (root.phase + 1) % 2
     }
 
     // --------------------------------------------------------------- tracking
@@ -329,6 +331,7 @@ Item {
             thickness: root.barThickness
             attenuation: root.attenuation
             checkerboard: root.config.checkerboard
+            checkerContrast: root.config.checkerContrast
             suspendOnFullscreen: root.config.suspendOnFullscreen
             hyprRevision: root.hyprRevision
             phaseX: GuardModel.phaseOffset(root.phase).x

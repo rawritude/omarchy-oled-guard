@@ -351,7 +351,7 @@ Panel {
                     PanelActionButton {
                         anchors.verticalCenter: parent.verticalCenter
                         iconText: String.fromCodePoint(0xF06D1) // eye-off-outline
-                        tooltipText: "Hide the bar entirely"
+                        tooltipText: "Hide the bar. Super+Ctrl+O then Menu Bar brings it back."
                         bordered: true
                         onClicked: root.toggleBarVisibility()
                     }
@@ -363,6 +363,18 @@ Panel {
                         font.family: Style.font.family
                         font.pixelSize: Style.font.caption
                     }
+                }
+
+                // This button hides the surface the button lives on, so the way
+                // back has to be legible BEFORE it is pressed -- a tooltip on a
+                // control that is about to vanish is no use afterwards.
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    text: "Hiding takes this panel with it. Super + Ctrl + O \u2192 Menu Bar brings the bar back."
+                    color: Qt.darker(root.bar ? root.bar.foreground : Color.foreground, 1.7)
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
                 }
 
                 PanelSeparator {

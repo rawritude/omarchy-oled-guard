@@ -51,12 +51,15 @@ PanelWindow {
         }
     }
 
+    property real checkerContrast: 0.25
+
     readonly property real effectiveAttenuation: screenFullscreen ? 0 : attenuation
-    readonly property real veilOpacity: GuardModel.veilOpacity(effectiveAttenuation, checkerboard)
+    readonly property var layers: GuardModel.veilLayers(effectiveAttenuation, checkerboard, checkerContrast)
 
     // Stay mapped until the fade has actually finished, otherwise dropping the
     // surface would cut the transition off at whatever alpha it had reached.
-    visible: veilOpacity > 0 || veil.opacity > 0.001
+    visible: layers.floor > 0 || layers.checker > 0
+             || floorVeil.opacity > 0.001 || checkerVeil.opacity > 0.001
 
     color: "transparent"
 
@@ -79,32 +82,38 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     mask: Region {}
 
+    // Two stacked black veils rather than one. They composite multiplicatively,
+    // which is exactly the model GuardModel.veilLayers solves against, so the
+    // painted result and the banked figure come from one derivation and cannot
+    // drift apart. No opacity on the parent: that would multiply both layers
+    // again and break the arithmetic.
     Item {
         id: veil
         anchors.fill: parent
         clip: true
 
-        // Computed in GuardModel so the painted alpha and the banked figure are
-        // derived from one place and cannot drift apart.
-        opacity: overlay.veilOpacity
+        // Flat floor over the whole strip. In flat-dim mode this is the entire
+        // effect; in checker mode it carries whatever depth the checker does
+        // not, which is what keeps peak drive off 100%.
+        Rectangle {
+            id: floorVeil
+            anchors.fill: parent
+            color: "black"
+            opacity: overlay.layers.floor
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: overlay.fadeMs
-                easing.type: Easing.InOutQuad
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: overlay.fadeMs
+                    easing.type: Easing.InOutQuad
+                }
             }
         }
 
-        Rectangle {
-            anchors.fill: parent
-            visible: !overlay.checkerboard
-            color: "black"
-        }
-
         Image {
-            visible: overlay.checkerboard
+            id: checkerVeil
             source: Qt.resolvedUrl("checker.png")
             fillMode: Image.Tile
+            opacity: overlay.layers.checker
 
             // Offset by the current phase and oversize to match, so rotating
             // the pattern never uncovers an edge of the strip.
@@ -116,6 +125,13 @@ PanelWindow {
             smooth: false
             mipmap: false
             cache: true
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: overlay.fadeMs
+                    easing.type: Easing.InOutQuad
+                }
+            }
         }
     }
 }

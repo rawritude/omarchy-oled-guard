@@ -22,17 +22,22 @@ var DEFAULTS = {
 
     fadeMs: 1500,
 
-    // Hard mode: instead of a flat dim, tile a checkerboard so half the strip
-    // is covered at double alpha, rotating the phase so the pattern itself
-    // cannot etch in.
+    // Texture mode: a flat floor across the strip plus a shallow checker over
+    // half of it, rotating so the pattern cannot etch itself in.
     //
-    // It does NOT save more wear than flat dim. At equal average it is level
-    // under a linear model, and slightly worse under realistic superlinear
-    // aging: rotation leaves each pixel at full drive half the time, and for a
-    // convex wear curve the average of the extremes exceeds the middle. It is
-    // offered for people who want the deep-rest behaviour, not as an upgrade.
+    // It does NOT save more wear than a plain flat dim. At equal average the
+    // two are level under a linear model and worse under realistic superlinear
+    // ageing, because splitting an average into extremes costs more than
+    // holding the middle. It is a look, kept cheap; see veilLayers.
     checkerboard: false,
     checkerPhaseMinutes: 5,
+
+    // Depth of the checker layer, over a flat floor that carries the rest of
+    // the requested attenuation. Kept modest on purpose: the wear penalty for
+    // texture rises steeply with this and with nothing else, so 0.25 buys a
+    // clearly visible pattern for about 2% over flat dim, where the old
+    // no-floor behaviour (effectively 2x the attenuation) cost 11%.
+    checkerContrast: 0.25,
 
     // Never attenuate over fullscreen content -- dimming a film is a bug.
     suspendOnFullscreen: true,
@@ -111,6 +116,7 @@ function normalize(raw) {
         fadeMs: Math.round(clamp(asNumber(src.fadeMs, DEFAULTS.fadeMs), 0, 10000)),
         checkerboard: asBool(src.checkerboard, DEFAULTS.checkerboard),
         checkerPhaseMinutes: Math.round(clamp(asNumber(src.checkerPhaseMinutes, DEFAULTS.checkerPhaseMinutes), 1, 720)),
+        checkerContrast: clamp(asNumber(src.checkerContrast, DEFAULTS.checkerContrast), 0.05, 1),
         suspendOnFullscreen: asBool(src.suspendOnFullscreen, DEFAULTS.suspendOnFullscreen),
         tracking: asBool(src.tracking, DEFAULTS.tracking)
     }
@@ -146,33 +152,66 @@ function attenuationFor(state) {
     return state.idle ? state.idleOpacity : state.baseOpacity
 }
 
-// What the overlay paints. Checkerboard covers half the strip, so it doubles
-// alpha to hit the same average as a flat dim of the same depth.
-function veilOpacity(attenuation, checkerboard) {
+// The two stacked veils the overlay paints: a flat floor across the whole
+// strip, and a checker of depth `k` over half of it. Black veils composite
+// multiplicatively, so
+//
+//     uncovered drive = (1 - floor)
+//     covered   drive = (1 - floor)(1 - k)
+//     average         = (1 - floor)(1 - k/2)
+//
+// Solving that for a requested average attenuation `a` gives the floor below.
+//
+// Why not simply paint the checker at 2a with no floor, which also hits the
+// average? Because wear goes as L^gamma with gamma above 1, so the penalty for
+// splitting an average into extremes depends only on k -- the floor term
+// cancels out of the ratio entirely. Concretely, at gamma 2: k=0.5 with no
+// floor costs +11% over flat dim, while k=0.25 over a floor costs +2% for the
+// same average and the same visible texture. The no-floor version is the worst
+// available way to draw a checkerboard, and it is what this used to do.
+//
+// It also leaves half the pixels at full drive. Keeping a floor caps peak drive
+// too, which is the part the L^gamma model does not even charge for.
+function veilLayers(attenuation, checkerboard, checkerContrast) {
     var a = clamp(asNumber(attenuation, 0), 0, 1)
-    return checkerboard ? clamp(a * 2, 0, 1) : a
+    if (!checkerboard || a <= 0)
+        return { floor: a, checker: 0 }
+
+    // A checker of depth k costs k/2 of average attenuation on its own. It
+    // cannot be deeper than the budget allows, or the floor would go negative.
+    var k = clamp(asNumber(checkerContrast, 0.25), 0, 1)
+    k = Math.min(k, a * 2)
+
+    var floor = 1 - (1 - a) / (1 - k / 2)
+    return { floor: clamp(floor, 0, 1), checker: k }
 }
 
 // What the panel actually receives on average -- the only figure fit to report
 // or to bank.
 //
-// These diverge in checkerboard mode above 0.5: alpha saturates at 1.0, so the
-// delivered average caps at 0.5 however deep the config asked for. Booking the
-// requested value there would overstate the saving by up to 1.9x, in the mode
-// most likely to be chosen by someone who cares about the number.
-function effectiveAttenuation(attenuation, checkerboard) {
-    var painted = veilOpacity(attenuation, checkerboard)
-    return checkerboard ? painted / 2 : painted
+// Constructed to equal the request, so unlike the old no-floor checkerboard
+// there is no silent ceiling: the floor absorbs whatever depth the checker
+// cannot carry, at any requested attenuation.
+function effectiveAttenuation(attenuation, checkerboard, checkerContrast) {
+    var layers = veilLayers(attenuation, checkerboard, checkerContrast)
+    return clamp(1 - (1 - layers.floor) * (1 - layers.checker / 2), 0, 1)
 }
 
 // Checkerboard phase walks the four alignments of a 2x2 tile, so over a full
 // cycle every pixel in the strip has spent equal time lit and unlit.
+// A checkerboard has exactly two states, not four.
+//
+// The tile is opaque on its diagonal, so offsetting by (1,1) maps black onto
+// black and reproduces the original pattern: a four-step walk over
+// (0,0),(1,0),(0,1),(1,1) actually renders P, P', P', P. Total time came out
+// even, so wear levelling still worked, but each state was held for two
+// consecutive intervals instead of alternating, and the phase period was
+// effectively double what the setting said.
+//
+// Two phases, strictly alternating, is what the geometry supports.
 function phaseOffset(phase) {
-    var p = ((phase % 4) + 4) % 4
-    return {
-        x: p === 1 || p === 3 ? 1 : 0,
-        y: p === 2 || p === 3 ? 1 : 0
-    }
+    var p = ((phase % 2) + 2) % 2
+    return { x: p, y: 0 }
 }
 
 function emptyStats() {
