@@ -159,6 +159,23 @@ Measured on a `#c2c2c2` bar at the **Veiled** depth:
 Six times less peak drive, with the bar fully legible whenever you actually
 look at it.
 
+The two directions are timed differently on purpose. Clearing the veil answers
+a gesture you just made, so it has to feel immediate; putting it back is
+unprompted, so it should be slow enough that you never catch it happening. A
+single duration forces a choice between a sluggish reveal and a visibly
+blinking bar. Measured peak drive on the bar:
+
+| moment | peak drive |
+|---|---|
+| at rest | 33 / 255 |
+| ~100 ms after the pointer arrives | **255 / 255** — already clear |
+| ~100 ms after it leaves | 151 / 255 — still mid-fade |
+| settled, pointer away | 33 / 255 |
+
+Fullscreen counts as a reveal too, and uses the fast path: a film just started,
+and leaving a veil across the top of it for a second and a half is the bug the
+suspend exists to prevent.
+
 It costs nothing to implement and grabs no input: the bar already tracks its own
 hover state, and this plugin's overlay sits on top of it with an empty input
 region, so pointer events pass straight through to the bar underneath. No
@@ -213,7 +230,8 @@ All keys are optional; the defaults below are what you get with an empty entry.
   "baseOpacity": 0.0,          // 0.0-0.9  standing attenuation while active
   "idleOpacity": 0.5,          // 0.0-0.95 attenuation once idle
   "idleAfterSeconds": 90,      // 5-3600
-  "fadeMs": 1500,              // transition length; 0 for instant
+  "fadeMs": 1500,              // veiling back: slow, so you never catch it
+  "revealMs": 140,             // clearing: fast, it answers a gesture
 
   "checkerboard": false,       // true adds the rotating texture over the floor
   "checkerPhaseMinutes": 5,    // 1-720

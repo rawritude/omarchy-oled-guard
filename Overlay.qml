@@ -23,6 +23,20 @@ PanelWindow {
     property int phaseX: 0
     property int phaseY: 0
     property int fadeMs: 1500
+    property int revealMs: 140
+    property bool hovered: false
+    property bool revealOnHover: false
+
+    // Which duration applies is decided from the same inputs that move the
+    // target, not from the animation's own progress -- deriving it from the
+    // painted opacity would re-evaluate mid-flight and risk restarting the
+    // animation it is meant to be timing.
+    //
+    // Fullscreen counts as a reveal too: a film just started, and leaving a
+    // veil across the top of it for a second and a half is the bug this whole
+    // suspend exists to avoid.
+    readonly property bool revealingFast: (revealOnHover && hovered) || screenFullscreen
+    readonly property int transitionMs: revealingFast ? revealMs : fadeMs
 
     readonly property bool verticalEdge: edge === "left" || edge === "right"
 
@@ -103,8 +117,8 @@ PanelWindow {
 
             Behavior on opacity {
                 NumberAnimation {
-                    duration: overlay.fadeMs
-                    easing.type: Easing.InOutQuad
+                    duration: overlay.transitionMs
+                    easing.type: overlay.revealingFast ? Easing.OutCubic : Easing.InOutQuad
                 }
             }
         }
@@ -128,8 +142,8 @@ PanelWindow {
 
             Behavior on opacity {
                 NumberAnimation {
-                    duration: overlay.fadeMs
-                    easing.type: Easing.InOutQuad
+                    duration: overlay.transitionMs
+                    easing.type: overlay.revealingFast ? Easing.OutCubic : Easing.InOutQuad
                 }
             }
         }

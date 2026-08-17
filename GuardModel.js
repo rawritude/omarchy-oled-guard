@@ -20,7 +20,12 @@ var DEFAULTS = {
     idleOpacity: 0.5,
     idleAfterSeconds: 90,
 
+    // Asymmetric on purpose. Clearing the veil answers a gesture you just made,
+    // so it has to feel immediate; putting it back is unprompted, so it should
+    // be slow enough that you never catch it happening. One duration for both
+    // makes you choose between a sluggish reveal and a visibly blinking bar.
     fadeMs: 1500,
+    revealMs: 140,
 
     // Texture mode: a flat floor across the strip plus a shallow checker over
     // half of it, rotating so the pattern cannot etch itself in.
@@ -125,6 +130,7 @@ function normalize(raw) {
         idleOpacity: clamp(asNumber(src.idleOpacity, DEFAULTS.idleOpacity), 0, 0.95),
         idleAfterSeconds: Math.round(clamp(asNumber(src.idleAfterSeconds, DEFAULTS.idleAfterSeconds), 5, 3600)),
         fadeMs: Math.round(clamp(asNumber(src.fadeMs, DEFAULTS.fadeMs), 0, 10000)),
+        revealMs: Math.round(clamp(asNumber(src.revealMs, DEFAULTS.revealMs), 0, 10000)),
         checkerboard: asBool(src.checkerboard, DEFAULTS.checkerboard),
         checkerPhaseMinutes: Math.round(clamp(asNumber(src.checkerPhaseMinutes, DEFAULTS.checkerPhaseMinutes), 1, 720)),
         checkerContrast: clamp(asNumber(src.checkerContrast, DEFAULTS.checkerContrast), 0.05, 1),

@@ -347,6 +347,9 @@ Item {
             phaseX: GuardModel.phaseOffset(root.phase).x
             phaseY: GuardModel.phaseOffset(root.phase).y
             fadeMs: root.config.fadeMs
+            revealMs: root.config.revealMs
+            hovered: root.barHovered
+            revealOnHover: root.config.revealOnHover
         }
     }
 
