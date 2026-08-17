@@ -47,6 +47,9 @@ Panel {
         return guardActive ? glyphGuarding : glyphStandby
     }
 
+    // Off is simply the bottom of the intensity scale, not a separate axis, so
+    // it shares the row rather than owning a section of its own.
+    readonly property string levelValue: guardEnabled ? depthValue : "off"
     readonly property string powerValue: guardEnabled ? "on" : "off"
     readonly property string lookValue: guardChecker ? "checker" : "flat"
     readonly property bool guardReveal: setting("revealOnHover", false) === true
@@ -95,7 +98,7 @@ Panel {
         if (!service || !service.stats)
             return ""
         try {
-            return GuardModel.formatHours(service.stats.savedSeconds) + " of lit time reclaimed over "
+            return GuardModel.formatHours(service.stats.savedSeconds) + " reclaimed \u00b7 "
                     + GuardModel.formatHours(service.stats.panelSeconds) + " lit"
         } catch (e) {
             return ""
@@ -128,6 +131,19 @@ Panel {
             return
         }
         applySettings({ enabled: true })
+        if (root.service)
+            root.service.paused = false
+    }
+
+    function setLevel(value) {
+        if (value === "off") {
+            applySettings({ enabled: false })
+            return
+        }
+        var preset = root.depths[value]
+        if (!preset)
+            return
+        applySettings({ enabled: true, baseOpacity: preset.baseOpacity, idleOpacity: preset.idleOpacity })
         if (root.service)
             root.service.paused = false
     }
@@ -184,6 +200,15 @@ Panel {
             return v
         }
 
+        // off | light | medium | deep | veiled
+        function level(value: string): string {
+            var v = String(value || "")
+            if (v !== "off" && !root.depths[v])
+                return "expected off|light|medium|deep|veiled"
+            root.setLevel(v)
+            return v
+        }
+
         // always | hover
         function reveal(value: string): string {
             var v = String(value || "")
@@ -204,6 +229,7 @@ Panel {
 
         function state(): string {
             return JSON.stringify({
+                level: root.levelValue,
                 power: root.powerValue,
                 look: root.lookValue,
                 reveal: root.revealValue,
@@ -211,15 +237,6 @@ Panel {
                 opened: root.opened
             })
         }
-    }
-
-    Process { id: barToggle }
-
-    function toggleBarVisibility() {
-        if (barToggle.running)
-            return
-        barToggle.command = ["omarchy", "toggle", "bar"]
-        barToggle.running = true
     }
 
     // Ui.Panel is a bare Item with no sizing of its own, and the bar takes each
@@ -251,7 +268,7 @@ Panel {
         bar: root.bar
         open: root.opened
         focusTarget: keyCatcher
-        contentWidth: panel.fittedContentWidth(Style.space(300))
+        contentWidth: panel.fittedContentWidth(Style.space(330))
         contentHeight: panel.fittedContentHeight(column.implicitHeight)
 
         PanelKeyCatcher {
@@ -301,40 +318,21 @@ Panel {
 
                 PanelSeparator { width: parent.width }
 
-                PanelSectionHeader { text: "PROTECTION" }
+                PanelSectionHeader { text: "LEVEL" }
 
                 ButtonGroup {
                     width: parent.width
-                    value: root.powerValue
+                    value: root.levelValue
                     options: [
-                        { value: "off", label: "Off", tooltip: "No attenuation at all" },
-                        { value: "on", label: "On", tooltip: "Attenuate the bar strip" }
+                        { value: "off", label: "Off", tooltip: "No attenuation" },
+                        { value: "light", label: "Light", tooltip: "10% working, 40% idle" },
+                        { value: "medium", label: "Med", tooltip: "15% working, 55% idle" },
+                        { value: "deep", label: "Deep", tooltip: "25% working, 75% idle" },
+                        { value: "veiled", label: "Veil", tooltip: "85% working. Needs Reveal on hover to stay usable." }
                     ]
-                    onChanged: function (value) { root.setPower(value) }
+                    onChanged: function (value) { root.setLevel(value) }
                 }
 
-                PanelSectionHeader { text: "DEPTH" }
-
-                ButtonGroup {
-                    width: parent.width
-                    enabled: root.guardEnabled
-                    opacity: root.guardEnabled ? 1 : 0.4
-                    value: root.depthValue
-                    options: [
-                        { value: "light", label: "Light", tooltip: "10% while working, 40% idle" },
-                        { value: "medium", label: "Medium", tooltip: "15% while working, 55% idle" },
-                        { value: "deep", label: "Deep", tooltip: "25% while working, 75% idle" },
-                        { value: "veiled", label: "Veiled", tooltip: "85% while working. Only practical with Reveal on hover." }
-                    ]
-                    onChanged: function (value) { root.setDepth(value) }
-                }
-
-                // Deliberately its own section, below DEPTH and named for what
-                // it is. Sitting in the protection row it read as a third,
-                // strongest setting -- the opposite of true. Checker delivers
-                // the same average attenuation as Flat but concentrates it,
-                // leaving half the pixels at full drive; under superlinear
-                // ageing that is worse, and worse the deeper you set it.
                 PanelSectionHeader { text: "REVEAL" }
 
                 ButtonGroup {
@@ -343,20 +341,10 @@ Panel {
                     opacity: root.guardEnabled ? 1 : 0.4
                     value: root.revealValue
                     options: [
-                        { value: "always", label: "Always on", tooltip: "The veil holds at the chosen depth at all times" },
+                        { value: "always", label: "Always on", tooltip: "Veil holds at the chosen level at all times" },
                         { value: "hover", label: "On hover", tooltip: "Veil clears the moment the pointer reaches the bar" }
                     ]
                     onChanged: function (value) { root.setReveal(value) }
-                }
-
-                Text {
-                    width: parent.width
-                    visible: root.guardReveal
-                    wrapMode: Text.WordWrap
-                    text: "The bar clears when you point at it, so it can sit much darker the rest of the time \u2014 try Veiled."
-                    color: Qt.darker(root.bar ? root.bar.foreground : Color.foreground, 1.6)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
                 }
 
                 PanelSectionHeader { text: "LOOK" }
@@ -367,60 +355,10 @@ Panel {
                     opacity: root.guardEnabled ? 1 : 0.4
                     value: root.lookValue
                     options: [
-                        { value: "flat", label: "Flat", tooltip: "Even attenuation. Protects best at every depth." },
-                        { value: "checker", label: "Checker", tooltip: "Textured. Same average, worse for wear \u2014 a look, not more protection." }
+                        { value: "flat", label: "Flat", tooltip: "Even attenuation. Protects best at every level." },
+                        { value: "checker", label: "Checker", tooltip: "Textured. Same average, slightly worse for wear \u2014 a look, not more protection." }
                     ]
                     onChanged: function (value) { root.setLook(value) }
-                }
-
-                Text {
-                    width: parent.width
-                    visible: root.guardChecker
-                    wrapMode: Text.WordWrap
-                    text: "Checker is a texture, not more protection \u2014 Flat protects better."
-                    color: Qt.darker(root.bar ? root.bar.foreground : Color.foreground, 1.6)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                }
-
-                PanelSeparator { width: parent.width }
-
-                PanelSectionHeader { text: "BAR" }
-
-                // The strongest mitigation for a static bar is not attenuating
-                // it -- it is not drawing it. Omarchy already ships the toggle;
-                // surfacing it here puts the two options side by side.
-                Row {
-                    width: parent.width
-                    spacing: Style.space(8)
-
-                    PanelActionButton {
-                        anchors.verticalCenter: parent.verticalCenter
-                        iconText: String.fromCodePoint(0xF06D1) // eye-off-outline
-                        tooltipText: "Hide the bar. Super+Ctrl+O then Menu Bar brings it back."
-                        bordered: true
-                        onClicked: root.toggleBarVisibility()
-                    }
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "Hide the bar"
-                        color: Qt.darker(root.bar ? root.bar.foreground : Color.foreground, 1.3)
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
-                    }
-                }
-
-                // This button hides the surface the button lives on, so the way
-                // back has to be legible BEFORE it is pressed -- a tooltip on a
-                // control that is about to vanish is no use afterwards.
-                Text {
-                    width: parent.width
-                    wrapMode: Text.WordWrap
-                    text: "Hiding takes this panel with it. Super + Ctrl + O \u2192 Menu Bar brings the bar back."
-                    color: Qt.darker(root.bar ? root.bar.foreground : Color.foreground, 1.7)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
                 }
 
                 PanelSeparator {

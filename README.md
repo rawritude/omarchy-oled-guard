@@ -263,33 +263,26 @@ figure, so nothing here needs hand-editing `shell.json`. **Right click** pauses
 and resumes without opening anything.
 
 ```
-  PROTECTION   Off  ·  On
-  DEPTH        Light  ·  Medium  ·  Deep  ·  Veiled
-  REVEAL       Always on  ·  On hover
-  LOOK         Flat  ·  Checker
-  BAR          Hide the bar
+  LEVEL    Off  ·  Light  ·  Med  ·  Deep  ·  Veil
+  REVEAL   Always on  ·  On hover
+  LOOK     Flat  ·  Checker
 ```
+
+Three rows, no prose. Off is the bottom of the intensity scale rather than a
+separate axis, and every explanation lives in a tooltip -- a settings panel that
+argues with you is a settings panel you stop opening.
 
 LOOK is a separate section on purpose. Sitting in the protection row, Checker
 read as a third and strongest setting — the opposite of true.
 
-Depth is presets rather than raw opacities, because "how protected do you want
-to be" is the question people actually have. Light is 10%/40%, Medium 15%/55%,
-Deep 25%/75%, Veiled 85%/90% — working and idle respectively.
+Levels are presets rather than raw opacities, because "how protected do you want
+to be" is the question people actually have. Light is 10%/40%, Med 15%/55%,
+Deep 25%/75%, Veil 85%/90% — working and idle respectively.
 
-The **Hide the bar** row sits deliberately beside the attenuation controls: not
-drawing the bar beats attenuating it, Omarchy already ships that toggle, and
-the two belong next to each other rather than in separate places.
-
-It hides the surface this panel lives on, so the way back is printed under the
-button rather than left in a tooltip that vanishes with it:
-
-```
-Super + Ctrl + O  ->  Menu Bar
-```
-
-The Omarchy menu is its own overlay rather than part of the bar, so it stays
-reachable. `omarchy toggle bar` from any terminal does the same.
+Hiding the bar outright is still the theoretical maximum, and Omarchy already
+ships it at **Super + Ctrl + O → Menu Bar**. It is deliberately not duplicated
+here: it would remove the surface its own control lives on, and Reveal on hover
+gets most of the way there with nothing to discover and nothing to undo.
 
 This panel is the one file that imports Omarchy's internal `qs.*` UI module, so
 it matches every other dropdown. The service and the overlay stay
@@ -310,6 +303,7 @@ omarchy-shell oledguard reset     # zero the accumulated stats
 The panel exposes the same choices, so they can go on a keybinding:
 
 ```bash
+omarchy-shell oled.guard level off|light|medium|deep|veiled
 omarchy-shell oled.guard mode off|dim|checker   # sets power and look at once
 omarchy-shell oled.guard reveal always|hover
 omarchy-shell oled.guard look flat|checker
