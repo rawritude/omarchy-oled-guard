@@ -226,7 +226,7 @@ All keys are optional; the defaults below are what you get with an empty entry.
   "id": "oled.guard",
 
   "enabled": true,             // false disables without uninstalling
-  "baseOpacity": 0.0,          // 0.0-0.9  standing attenuation while active
+  "baseOpacity": 0.15,         // 0.0-0.9  standing attenuation while active
   "idleOpacity": 0.5,          // 0.0-0.95 attenuation once idle
   "idleAfterSeconds": 90,      // 5-3600
   "fadeMs": 700,               // veiling back: gradual, so you never catch it
@@ -244,9 +244,10 @@ All keys are optional; the defaults below are what you get with an empty entry.
 }
 ```
 
-`baseOpacity` defaults to `0.0` — out of the box the guard only acts on idle,
-so nothing about your bar changes while you are looking at it. Raise it to
-`0.15`–`0.25` for a standing reduction that is easy to stop noticing.
+Installing it starts you at **Medium** — a 15% standing reduction that is easy
+to stop noticing, deepening to 55% when you go idle. A plugin whose job is to
+attenuate the bar should do that on install rather than sit inert until
+configured. One click on **Off** in the panel stops it entirely.
 
 Config changes hot-reload. Editing the plugin's `.js` requires
 `omarchy restart shell` (plugin code is cached, `.qml` and `.js` alike).

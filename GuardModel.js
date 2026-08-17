@@ -13,8 +13,14 @@ var DEFAULTS = {
     // Attenuation applied to the bar strip whenever the guard is awake. The
     // bar is the one surface that holds still for the whole session, so this
     // is the number that decides whether it out-wears the rest of the panel.
-    // 0 keeps the bar at full brightness; the guard then only acts on idle.
-    baseOpacity: 0.0,
+    //
+    // Defaults to the Medium preset rather than 0. A plugin whose entire job
+    // is to attenuate the bar should attenuate the bar when installed; leaving
+    // it inert until configured reads as broken, and it made the panel report
+    // "Medium" on a fresh install while the guard delivered nothing -- the
+    // panel fallback and this default have to agree, and this is the pair
+    // worth agreeing on.
+    baseOpacity: 0.15,
 
     // Deeper attenuation once there has been no input for idleAfterSeconds.
     idleOpacity: 0.5,
