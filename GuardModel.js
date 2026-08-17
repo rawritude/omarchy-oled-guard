@@ -39,6 +39,17 @@ var DEFAULTS = {
     // no-floor behaviour (effectively 2x the attenuation) cost 11%.
     checkerContrast: 0.25,
 
+    // Lift the veil while the pointer is on the bar, the way omarchy's own
+    // indicators reveal themselves on hover.
+    //
+    // This is the setting that makes deep attenuation practical. A bar you must
+    // read at a glance can only be dimmed so far; a bar that clears the moment
+    // you reach for it can sit at 85% attenuation all day, which is a different
+    // order of saving. It also beats hiding the bar outright: nothing to
+    // discover, nothing to undo.
+    revealOnHover: false,
+    hoverOpacity: 0.0,
+
     // Never attenuate over fullscreen content -- dimming a film is a bug.
     suspendOnFullscreen: true,
 
@@ -117,6 +128,8 @@ function normalize(raw) {
         checkerboard: asBool(src.checkerboard, DEFAULTS.checkerboard),
         checkerPhaseMinutes: Math.round(clamp(asNumber(src.checkerPhaseMinutes, DEFAULTS.checkerPhaseMinutes), 1, 720)),
         checkerContrast: clamp(asNumber(src.checkerContrast, DEFAULTS.checkerContrast), 0.05, 1),
+        revealOnHover: asBool(src.revealOnHover, DEFAULTS.revealOnHover),
+        hoverOpacity: clamp(asNumber(src.hoverOpacity, DEFAULTS.hoverOpacity), 0, 0.9),
         suspendOnFullscreen: asBool(src.suspendOnFullscreen, DEFAULTS.suspendOnFullscreen),
         tracking: asBool(src.tracking, DEFAULTS.tracking)
     }
@@ -149,6 +162,11 @@ function attenuationFor(state) {
     // number drift toward idleOpacity no matter what the guard actually did.
     if (!state.lit)
         return 0
+    // Hover wins over idle: reaching for the bar is input, so the two cannot
+    // truthfully be in conflict, and resolving it here keeps the reveal instant
+    // rather than waiting on the idle monitor to catch up.
+    if (state.revealOnHover && state.hovered)
+        return state.hoverOpacity
     return state.idle ? state.idleOpacity : state.baseOpacity
 }
 

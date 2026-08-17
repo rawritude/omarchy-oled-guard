@@ -49,6 +49,8 @@ Panel {
 
     readonly property string powerValue: guardEnabled ? "on" : "off"
     readonly property string lookValue: guardChecker ? "checker" : "flat"
+    readonly property bool guardReveal: setting("revealOnHover", false) === true
+    readonly property string revealValue: guardReveal ? "hover" : "always"
 
     // Depth presets. Named rather than numeric because "how protected do you
     // want to be" is the question people actually have; the opacities are an
@@ -56,7 +58,10 @@ Panel {
     readonly property var depths: ({
         light: { baseOpacity: 0.10, idleOpacity: 0.40 },
         medium: { baseOpacity: 0.15, idleOpacity: 0.55 },
-        deep: { baseOpacity: 0.25, idleOpacity: 0.75 }
+        deep: { baseOpacity: 0.25, idleOpacity: 0.75 },
+        // Only sensible with Reveal on hover. A bar you must read at a glance
+        // cannot sit here; a bar that clears when you reach for it can.
+        veiled: { baseOpacity: 0.85, idleOpacity: 0.90 }
     })
 
     readonly property string depthValue: {
@@ -65,7 +70,9 @@ Panel {
             return "light"
         if (base <= 0.20)
             return "medium"
-        return "deep"
+        if (base <= 0.50)
+            return "deep"
+        return "veiled"
     }
 
     readonly property string stateLine: {
@@ -129,6 +136,10 @@ Panel {
         applySettings({ checkerboard: value === "checker" })
     }
 
+    function setReveal(value) {
+        applySettings({ revealOnHover: value === "hover" })
+    }
+
     // Kept for scripts: one verb that sets both at once.
     function setMode(value) {
         if (value === "off") {
@@ -173,6 +184,15 @@ Panel {
             return v
         }
 
+        // always | hover
+        function reveal(value: string): string {
+            var v = String(value || "")
+            if (v !== "always" && v !== "hover")
+                return "expected always|hover"
+            root.setReveal(v)
+            return v
+        }
+
         // flat | checker
         function look(value: string): string {
             var v = String(value || "")
@@ -186,6 +206,7 @@ Panel {
             return JSON.stringify({
                 power: root.powerValue,
                 look: root.lookValue,
+                reveal: root.revealValue,
                 depth: root.depthValue,
                 opened: root.opened
             })
@@ -302,7 +323,8 @@ Panel {
                     options: [
                         { value: "light", label: "Light", tooltip: "10% while working, 40% idle" },
                         { value: "medium", label: "Medium", tooltip: "15% while working, 55% idle" },
-                        { value: "deep", label: "Deep", tooltip: "25% while working, 75% idle" }
+                        { value: "deep", label: "Deep", tooltip: "25% while working, 75% idle" },
+                        { value: "veiled", label: "Veiled", tooltip: "85% while working. Only practical with Reveal on hover." }
                     ]
                     onChanged: function (value) { root.setDepth(value) }
                 }
@@ -313,6 +335,30 @@ Panel {
                 // the same average attenuation as Flat but concentrates it,
                 // leaving half the pixels at full drive; under superlinear
                 // ageing that is worse, and worse the deeper you set it.
+                PanelSectionHeader { text: "REVEAL" }
+
+                ButtonGroup {
+                    width: parent.width
+                    enabled: root.guardEnabled
+                    opacity: root.guardEnabled ? 1 : 0.4
+                    value: root.revealValue
+                    options: [
+                        { value: "always", label: "Always on", tooltip: "The veil holds at the chosen depth at all times" },
+                        { value: "hover", label: "On hover", tooltip: "Veil clears the moment the pointer reaches the bar" }
+                    ]
+                    onChanged: function (value) { root.setReveal(value) }
+                }
+
+                Text {
+                    width: parent.width
+                    visible: root.guardReveal
+                    wrapMode: Text.WordWrap
+                    text: "The bar clears when you point at it, so it can sit much darker the rest of the time \u2014 try Veiled."
+                    color: Qt.darker(root.bar ? root.bar.foreground : Color.foreground, 1.6)
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
+                }
+
                 PanelSectionHeader { text: "LOOK" }
 
                 ButtonGroup {

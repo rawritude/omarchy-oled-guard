@@ -29,6 +29,9 @@ Holds a translucent veil over the bar strip, and only the bar strip.
   content underneath. Dimming a film is a bug, not a feature. Decided per
   monitor, so a film on one screen is not veiled because another screen
   happens to hold focus.
+- **Reveal on hover** (`revealOnHover`) — the veil clears the instant the
+  pointer reaches the bar, the way Omarchy's own indicators reveal themselves.
+  This is the setting that makes deep attenuation practical.
 - **Wear accounting** — tracks how much lit time it has actually reclaimed, so
   the plugin can be judged on numbers instead of vibes.
 
@@ -139,6 +142,31 @@ because a shader can only switch pixels fully off — it has no way to ask for
 "70% as bright". A QML overlay can, which is why the default here is the mode
 hyproled could not offer.
 
+## Reveal on hover
+
+A bar you have to read at a glance can only be dimmed so far. A bar that clears
+the moment you reach for it can sit far darker the rest of the time — which is
+a different order of saving, and strictly better than hiding the bar outright
+because there is nothing to discover and nothing to undo.
+
+Measured on a `#c2c2c2` bar at the **Veiled** depth:
+
+| pointer | delivered attenuation | peak drive |
+|---|---|---|
+| away from the bar | 0.85 | **33 / 255** |
+| on the bar | 0 | 194 / 255 |
+
+Six times less peak drive, with the bar fully legible whenever you actually
+look at it.
+
+It costs nothing to implement and grabs no input: the bar already tracks its own
+hover state, and this plugin's overlay sits on top of it with an empty input
+region, so pointer events pass straight through to the bar underneath. No
+polling, no second hover surface, no click interception.
+
+The **Veiled** depth preset (85% working, 90% idle) exists for this mode and is
+not really usable without it.
+
 ## What this plugin deliberately does not do
 
 **It does not orbit or nudge the bar.** Pixel-shift is the reflex suggestion
@@ -192,6 +220,9 @@ All keys are optional; the defaults below are what you get with an empty entry.
   "checkerContrast": 0.25,     // 0.05-1  depth of the checker layer. This alone
                                // sets the wear penalty; 0.25 costs ~2%.
 
+  "revealOnHover": false,      // clear the veil while the pointer is on the bar
+  "hoverOpacity": 0.0,         // 0.0-0.9  attenuation while hovered
+
   "suspendOnFullscreen": true, // lift the veil over fullscreen content
   "tracking": true             // record reclaimed lit time
 }
@@ -215,7 +246,8 @@ and resumes without opening anything.
 
 ```
   PROTECTION   Off  ·  On
-  DEPTH        Light  ·  Medium  ·  Deep
+  DEPTH        Light  ·  Medium  ·  Deep  ·  Veiled
+  REVEAL       Always on  ·  On hover
   LOOK         Flat  ·  Checker
   BAR          Hide the bar
 ```
@@ -225,7 +257,7 @@ read as a third and strongest setting — the opposite of true.
 
 Depth is presets rather than raw opacities, because "how protected do you want
 to be" is the question people actually have. Light is 10%/40%, Medium 15%/55%,
-Deep 25%/75% — working and idle respectively.
+Deep 25%/75%, Veiled 85%/90% — working and idle respectively.
 
 The **Hide the bar** row sits deliberately beside the attenuation controls: not
 drawing the bar beats attenuating it, Omarchy already ships that toggle, and
@@ -261,6 +293,7 @@ The panel exposes the same choices, so they can go on a keybinding:
 
 ```bash
 omarchy-shell oled.guard mode off|dim|checker   # sets power and look at once
+omarchy-shell oled.guard reveal always|hover
 omarchy-shell oled.guard look flat|checker
 omarchy-shell oled.guard depth light|medium|deep
 omarchy-shell oled.guard toggle   # open/close the panel

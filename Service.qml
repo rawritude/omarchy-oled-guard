@@ -72,6 +72,11 @@ Item {
     readonly property int barThickness: shell && shell.bar && shell.bar.barSize > 0 ? shell.bar.barSize : 26
     readonly property bool barHidden: shell && shell.bar ? !!shell.bar.barHidden : false
 
+    // The bar tracks its own hover, and the overlay sits on top of it with an
+    // empty input region, so pointer events pass straight through and the bar
+    // still sees them. No polling, no input grab, no second hover surface.
+    readonly property bool barHovered: shell && shell.bar ? !!shell.bar.barHovered : false
+
     // ------------------------------------------------------------ attenuation
     //
     // Screen-independent part only. Fullscreen is resolved per overlay, since
@@ -82,6 +87,9 @@ Item {
         barHidden: root.barHidden,
         lit: root.lit,
         idle: root.idle,
+        hovered: root.barHovered,
+        revealOnHover: config.revealOnHover,
+        hoverOpacity: config.hoverOpacity,
         baseOpacity: config.baseOpacity,
         idleOpacity: config.idleOpacity
     })
@@ -107,6 +115,8 @@ Item {
             requestedAttenuation: Math.round(root.attenuation * 100) / 100,
             mode: config.checkerboard ? "checkerboard" : "dim",
             idle: root.idle,
+            hovered: root.barHovered,
+            revealOnHover: config.revealOnHover,
             lit: root.lit,
             locked: root.locked,
             displayAwake: root.displayAwake,
