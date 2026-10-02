@@ -177,10 +177,12 @@ Fullscreen counts as a reveal too, and uses the fast path: a film just started,
 and leaving a veil across the top of it for a second and a half is the bug the
 suspend exists to prevent.
 
-It costs nothing to implement and grabs no input: the bar already tracks its own
-hover state, and this plugin's overlay sits on top of it with an empty input
-region, so pointer events pass straight through to the bar underneath. No
-polling, no second hover surface, no click interception.
+It grabs no input. The overlay sits on top of the bar with an empty input
+region, so pointer events pass straight through to the bar underneath. Hover
+comes from the bar indicator, which lives inside the bar window and watches
+hover on it with a passive handler. No polling, no second hover surface, no
+click interception. That also means hover reveal needs the indicator on the
+bar.
 
 The **Veiled** depth preset (85% working, 90% idle) exists for this mode and is
 not really usable without it.
@@ -218,6 +220,10 @@ Enabling adds an entry to `~/.config/omarchy/shell.json`. The plugin ships both
 a background service and an optional bar indicator, and reads its config from
 whichever entry exists — the `bar.layout` entry if you enabled the widget, or a
 `plugins[]` entry if you want the service without the indicator.
+
+On Omarchy 4.0.3 and later, third-party plugins only see the bar config, so a
+`plugins[]` entry still runs the service but its settings are ignored and the
+defaults apply. Keep the indicator on the bar if you want to configure it.
 
 ## Removing it
 

@@ -31,6 +31,84 @@ Panel {
         return null
     }
 
+    // Hover reveal needs to know when the pointer is on the bar, and the shell
+    // no longer tells third-party plugins. This widget sits inside the bar
+    // window, so a HoverHandler on that window's content item sees the same
+    // thing the bar's own handler does. Handlers are passive for hover, so it
+    // takes nothing away from the widgets underneath.
+    readonly property Item barSurface: root.Window.contentItem
+    property var hoverProbe: null
+    property var hoverReportedTo: null
+    readonly property bool barHovered: hoverProbe ? hoverProbe.hovered : false
+
+    function attachHoverProbe() {
+        if (hoverProbe) {
+            hoverProbe.destroy()
+            hoverProbe = null
+        }
+        if (barSurface)
+            hoverProbe = hoverProbeComponent.createObject(barSurface)
+    }
+
+    // Moves this bar's hover report to whichever service is current, so a
+    // service reload mid-hover neither strands a count nor drops one.
+    function reportHover() {
+        var target = barHovered && service && typeof service.noteBarHover === "function"
+            ? service : null
+        if (target === hoverReportedTo)
+            return
+        if (hoverReportedTo) {
+            try {
+                hoverReportedTo.noteBarHover(false)
+            } catch (e) {
+            }
+        }
+        if (target)
+            target.noteBarHover(true)
+        hoverReportedTo = target
+    }
+
+    // The service's own copy of the bar config trails shell.json by one
+    // change on 4.0.3+: the shell refreshes plugin facades before its
+    // barConfig binding has caught up. The settings injected here are current,
+    // so hand them over. Only once they have actually arrived, since the
+    // initial empty object would briefly reset the service to defaults.
+    property bool settingsInjected: false
+
+    function pushSettings() {
+        if (settingsInjected && service && "widgetSettings" in service)
+            service.widgetSettings = settings
+    }
+
+    onSettingsChanged: {
+        settingsInjected = true
+        pushSettings()
+    }
+
+    onBarSurfaceChanged: attachHoverProbe()
+    onBarHoveredChanged: reportHover()
+    onServiceChanged: {
+        pushSettings()
+        reportHover()
+    }
+    Component.onCompleted: attachHoverProbe()
+    // Unplugging a monitor destroys its bar without a leave event.
+    Component.onDestruction: {
+        if (hoverProbe)
+            hoverProbe.destroy()
+        if (hoverReportedTo) {
+            try {
+                hoverReportedTo.noteBarHover(false)
+            } catch (e) {
+            }
+        }
+    }
+
+    Component {
+        id: hoverProbeComponent
+        HoverHandler {}
+    }
+
     readonly property bool guardEnabled: setting("enabled", true) !== false
     readonly property bool guardChecker: setting("checkerboard", false) === true
     readonly property bool guardPaused: service ? !!service.paused : false
