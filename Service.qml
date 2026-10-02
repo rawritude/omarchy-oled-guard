@@ -25,8 +25,19 @@ Item {
     property string omarchyPath: ""
     property var manifest: null
 
-    readonly property var config: GuardModel.normalize(
-        GuardModel.entryFor(shell ? shell.shellConfig : null, GuardModel.PLUGIN_ID))
+    // Omarchy 4.0.3 stopped handing third-party plugins the real shell. The
+    // scoped facade has no shellConfig, only a detached copy of the bar
+    // config, so the bar.layout entry is the only place settings can come
+    // from. Wrapping it in the shape entryFor expects keeps older shells,
+    // which still pass shellConfig, on the same path.
+    //
+    // That copy lags shell.json by one change, so the bar widget also pushes
+    // its injected settings into widgetSettings, which wins once it is set.
+    property var widgetSettings: null
+
+    readonly property var config: GuardModel.normalize(widgetSettings
+        || GuardModel.entryFor(shell ? (shell.shellConfig || { bar: shell.barConfig }) : null,
+            GuardModel.PLUGIN_ID))
 
     // Runtime pause, driven by IPC or the bar widget. Deliberately not
     // persisted: a pause is for "not right now", not for "forever" -- forever
@@ -64,10 +75,20 @@ Item {
     readonly property int barThickness: shell && shell.bar && shell.bar.barSize > 0 ? shell.bar.barSize : 26
     readonly property bool barHidden: shell && shell.bar ? !!shell.bar.barHidden : false
 
-    // The bar tracks its own hover, and the overlay sits on top of it with an
-    // empty input region, so pointer events pass straight through and the bar
-    // still sees them. No polling, no input grab, no second hover surface.
-    readonly property bool barHovered: shell && shell.bar ? !!shell.bar.barHovered : false
+    // The overlay sits on top of the bar with an empty input region, so
+    // pointer events pass straight through and the bar still sees them.
+    //
+    // Older shells exposed the bar's own hover state. The scoped facade does
+    // not, so the bar widget watches hover on the bar window it lives in and
+    // reports it here through noteBarHover. One report per bar, since each
+    // screen has its own.
+    property int barHoverCount: 0
+    readonly property bool barHovered: barHoverCount > 0
+        || (shell && shell.bar ? shell.bar.barHovered === true : false)
+
+    function noteBarHover(hovered) {
+        barHoverCount = Math.max(0, barHoverCount + (hovered ? 1 : -1))
+    }
 
     // ------------------------------------------------------------ attenuation
     //
